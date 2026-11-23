@@ -17,42 +17,6 @@
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
     <link rel="stylesheet" href="style.css">
     <script src="player.js" defer></script>
-    <script>
-      if (location.search.indexOf("wavesDebug=1") !== -1) {
-        var waveProbe = { stage: "loading script", initialized: false, starts: 0, callbacks: 0, frames: 0 };
-        var waveErrors = [];
-        window.addEventListener("error", function (e) {
-          waveErrors.push(waveProbe.stage + ": " + (e.message || (e.target && e.target.src) || "load error") + (e.lineno ? " @" + e.lineno : ""));
-          if (waveErrors.length > 2) waveErrors.shift();
-        }, true);
-        window.addEventListener("DOMContentLoaded", function () {
-          var panel = document.createElement("pre");
-          panel.style.cssText = "position:fixed;top:0;left:0;z-index:10;background:black;color:white;font:11px monospace;padding:5px;pointer-events:none;white-space:pre-wrap";
-          document.body.appendChild(panel);
-          if (location.search.indexOf("wavesMask=0") !== -1) {
-            var frameBox = document.getElementById("wave-frame");
-            frameBox.style.webkitMaskImage = "none";
-            frameBox.style.maskImage = "none";
-          }
-          function report() {
-            var g = document.getElementById("rings"), r = g && g.firstElementChild;
-            var svg = document.getElementById("waves");
-            var box = svg ? svg.getBoundingClientRect() : {width:0, height:0};
-            panel.textContent = "waves " + (g && g.getAttribute("data-build") || "not initialized") +
-              " / " + document.getElementById("playback-state").getAttribute("data-state") +
-              " / reduce=" + matchMedia("(prefers-reduced-motion: reduce)").matches +
-              "\nSVG " + Math.round(box.width) + "×" + Math.round(box.height) +
-              " / r=" + (r && r.getAttribute("r")) + " / opacity=" + (g && g.style.opacity) +
-              "\ninit=" + waveProbe.initialized + " / stage=" + waveProbe.stage +
-              "\nstarts=" + waveProbe.starts + " / RAF=" + waveProbe.callbacks + " / frames=" + waveProbe.frames +
-              " / hidden=" + document.hidden +
-              "\nerrors: " + (waveErrors.slice(-2).join(" | ") || "none");
-          }
-          report();
-          setInterval(report, 400);
-        });
-      }
-    </script>
     <script src="field.js" defer></script>
   </head>
   <body>

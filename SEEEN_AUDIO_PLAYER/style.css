@@ -40,11 +40,16 @@ footer small { font-size:11px; }
 @media(prefers-reduced-motion:reduce){ * { transition:none!important; } }
 
 /* Feather the last few pixels where wide arcs leave the field. */
-#wave-frame.wide {
-  -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent), linear-gradient(to bottom, transparent, black 8%, black 92%, transparent);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent), linear-gradient(to bottom, transparent, black 8%, black 92%, transparent);
-  mask-composite: intersect;
+#wave-frame.wide::after {
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  color:var(--paper);
+  transition:color var(--theme-time) ease-in-out;
+  background:
+    linear-gradient(to right, currentColor, transparent 8%, transparent 92%, currentColor),
+    linear-gradient(to bottom, currentColor, transparent 8%, transparent 92%, currentColor);
 }
 
 /* Interpolate painted colors, including controls whose colors invert. */
