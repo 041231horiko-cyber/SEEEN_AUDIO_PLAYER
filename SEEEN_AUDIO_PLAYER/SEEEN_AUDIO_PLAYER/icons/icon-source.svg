@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#000"/>
+  <rect x="54" y="54" width="404" height="8" fill="#f4f4f2"/>
+  <text x="54" y="242" fill="#f4f4f2" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="96" font-weight="700" letter-spacing="-5">SEEEN</text>
+  <text x="58" y="294" fill="#8d8d89" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="30" font-weight="600" letter-spacing="4">AUDIO PLAYER</text>
+  <circle cx="64" cy="438" r="10" fill="#f4f4f2"/>
+</svg>
