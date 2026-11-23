@@ -1,9 +1,11 @@
 // Attribute-driven visual prototype. The audio player owns playback.
 (function () {
   "use strict";
+  var probe = window.waveProbe;
+  if (probe) probe.stage = "initializing";
   var state = document.getElementById("playback-state");
   var rings = document.getElementById("rings");
-  rings.setAttribute("data-build", "v11");
+  rings.setAttribute("data-build", "v12");
   var layers = [];
   var reduced = matchMedia("(prefers-reduced-motion: reduce)");
   var elapsed = 0, last = 0, frame = 0, track = "";
@@ -23,6 +25,7 @@
   var dot = rings.nextElementSibling;
   var fadeStart = 1;
   function cueFrame() {
+    if (probe) probe.stage = "count in";
     var progress = media.duration > 0 && Number.isFinite(media.duration) ? media.currentTime / media.duration : 0;
     rings.style.opacity = fadeStart * Math.max(0, 1 - 2 * progress);
     dot.style.opacity = progress >= .5 ? 1 : .45;
@@ -41,6 +44,7 @@
   var wideStops = [[0,1],[.42,.93],[.72,.52],[.9,.12],[1,0]];
   var echoStops = [[0,0],[.25,.12],[.65,.58],[1,1]];
   function draw() {
+    if (probe) probe.stage = "drawing";
     var narrow = track.indexOf("narrow") >= 0;
     layers.forEach(function (circle, i) {
       var radius, opacity, echo = false;
@@ -78,11 +82,13 @@
     });
   }
   function tick(time) {
+    if (probe) { probe.stage = "RAF"; probe.callbacks++; }
     if (!last) last = time;
-    if (time-last >= 32) { elapsed += time-last; last = time; draw(); }
+    if (time-last >= 32) { elapsed += time-last; last = time; draw(); if (probe) probe.frames++; }
     frame = requestAnimationFrame(tick);
   }
   function sync() {
+    if (probe) probe.stage = "sync";
     var selected = document.querySelector('[data-track][aria-pressed="true"]');
     var next = selected ? selected.dataset.track : "";
     cancelAnimationFrame(frame);
@@ -109,7 +115,12 @@
     last = 0;
     if (reduced.matches && track && !elapsed) elapsed = 2300;
     draw();
-    if (!document.hidden && !reduced.matches && state.dataset.state === "playing") frame = requestAnimationFrame(tick);
+    if (!document.hidden && !reduced.matches && state.dataset.state === "playing") {
+      if (probe) { probe.stage = "request frame"; probe.starts++; }
+      frame = requestAnimationFrame(tick);
+    } else if (probe) {
+      probe.stage = "idle / static";
+    }
   }
   var observer = new MutationObserver(sync);
   observer.observe(state, { attributes:true, attributeFilter:["data-state"] });
@@ -122,4 +133,5 @@
   reduced.addListener(sync);
   document.addEventListener("visibilitychange",sync);
   sync();
+  if (probe) probe.initialized = true;
 }());
