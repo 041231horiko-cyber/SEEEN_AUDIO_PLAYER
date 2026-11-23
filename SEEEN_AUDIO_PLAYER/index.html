@@ -17,61 +17,46 @@
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
     <link rel="stylesheet" href="style.css">
     <script src="player.js" defer></script>
+    <script src="field.js" defer></script>
   </head>
   <body>
-    <main class="app-shell" aria-labelledby="app-title">
-      <header class="masthead">
-        <h1 id="app-title"><span>SEEEN</span><span>AUDIO PLAYER</span></h1>
-        <p class="device-mark">EXHIBITION UNIT</p>
+    <main>
+      <header>
+        <h1><img src="./seeen-logo.png" alt="SEEEN"><span>AUDIO PLAYER</span></h1>
+        <div class="unit">EXHIBITION UNIT<small>GRADUATION EXHIBITION</small></div>
       </header>
-
+      <section class="field" aria-label="現在の音源">
+        <svg id="waves" aria-hidden="true" viewBox="-100 -100 200 200" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <radialGradient id="wide-falloff" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="128.7">
+              <stop offset="0" stop-color="currentColor"/>
+              <stop offset=".42" stop-color="currentColor" stop-opacity=".93"/>
+              <stop offset=".72" stop-color="currentColor" stop-opacity=".52"/>
+              <stop offset=".90" stop-color="currentColor" stop-opacity=".12"/>
+              <stop offset="1" stop-color="currentColor" stop-opacity="0"/>
+            </radialGradient>
+            <radialGradient id="return-falloff" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="61">
+              <stop offset="0" stop-color="currentColor" stop-opacity="0"/>
+              <stop offset=".25" stop-color="currentColor" stop-opacity=".12"/>
+              <stop offset=".65" stop-color="currentColor" stop-opacity=".58"/>
+              <stop offset="1" stop-color="currentColor"/>
+            </radialGradient>
+          </defs>
+          <g id="rings"></g><circle r="2.4" fill="currentColor"/>
+        </svg>
+        <div class="caption"><small>CURRENT SOURCE</small><output id="now-playing">NONE</output></div>
+      </section>
       <section class="selector" aria-label="音源選択">
-        <button class="track-button" type="button" data-track="bright-wide" aria-pressed="false">
-          <span>BRIGHT</span>
-          <span>WIDE</span>
-        </button>
-        <button class="track-button" type="button" data-track="bright-narrow" aria-pressed="false">
-          <span>BRIGHT</span>
-          <span>NARROW</span>
-        </button>
-        <button class="track-button" type="button" data-track="dark-wide" aria-pressed="false">
-          <span>DARK</span>
-          <span>WIDE</span>
-        </button>
-        <button class="track-button" type="button" data-track="dark-narrow" aria-pressed="false">
-          <span>DARK</span>
-          <span>NARROW</span>
-        </button>
+        <button type="button" data-track="bright-wide" aria-pressed="false">BRIGHT / WIDE</button>
+        <button type="button" data-track="bright-narrow" aria-pressed="false">BRIGHT / NARROW</button>
+        <button type="button" data-track="dark-wide" aria-pressed="false">DARK / WIDE</button>
+        <button type="button" data-track="dark-narrow" aria-pressed="false">DARK / NARROW</button>
       </section>
-
-      <section class="transport" aria-label="再生操作">
-        <button id="play-toggle" class="play-toggle" type="button" aria-label="再生する">PLAY</button>
-      </section>
-
-      <section class="status-panel" aria-label="再生情報">
-        <div class="status-row">
-          <span>NOW PLAYING</span>
-          <output id="now-playing">NONE</output>
-        </div>
-        <div class="status-row">
-          <span>PLAYBACK</span>
-          <output id="playback-state" data-state="idle">IDLE</output>
-        </div>
-        <div class="status-row">
-          <span>LOOP</span>
-          <output>ON</output>
-        </div>
-        <div class="status-row">
-          <span>OFFLINE</span>
-          <button id="offline-status" class="status-action" type="button" data-state="checking" disabled>CHECKING</button>
-        </div>
-      </section>
-
-      <p id="error-message" class="error-message" role="alert" hidden></p>
-      <p id="instruction" class="instruction">TAP A SOUND FIELD TO START</p>
-
+      <button id="play-toggle" type="button" aria-label="再生する">PLAY</button>
+      <footer><div><small>PLAYBACK</small><output id="playback-state" data-state="idle">IDLE</output></div><div><small>LOOP</small>ON</div><div><small>OFFLINE</small><button id="offline-status" type="button" disabled>CHECKING</button></div></footer>
+      <p id="error-message" role="alert" hidden></p>
+      <span id="instruction" hidden></span><span id="live-announcement" class="sr" aria-live="polite"></span>
       <audio id="audio-player" preload="metadata" loop playsinline></audio>
-      <div id="live-announcement" class="visually-hidden" aria-live="polite"></div>
     </main>
   </body>
 </html>

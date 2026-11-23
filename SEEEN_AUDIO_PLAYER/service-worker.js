@@ -1,12 +1,15 @@
 "use strict";
 
 // 完成音源を同じファイル名で差し替えたら、この値を必ず更新する。
-var CACHE_VERSION = "seeen-audio-v5";
+var CACHE_VERSION = "seeen-audio-v10";
 var APP_ASSETS = [
   "./",
   "./index.html",
   "./style.css",
   "./player.js",
+  "./field.js",
+  "./seeen-logo.png",
+  "./BarlowCondensed-SemiBold.ttf",
   "./manifest.json",
   "./icons/apple-touch-icon.png",
   "./icons/icon-180.png",
@@ -14,6 +17,7 @@ var APP_ASSETS = [
   "./icons/icon-512.png"
 ];
 var AUDIO_ASSETS = [
+  "./audio/ui-switch.wav",
   "./audio/bright_wide_loop.wav",
   "./audio/bright_narrow_loop.wav",
   "./audio/dark_wide_loop.wav",
@@ -51,6 +55,7 @@ async function verifyOfflineCache() {
   return {
     ready: missing.length === 0,
     missing: missing,
+    switchCueCached: missing.indexOf("./audio/ui-switch.wav") === -1,
     cacheName: CACHE_VERSION
   };
 }
