@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+    <meta name="theme-color" content="#000000">
+    <meta name="color-scheme" content="dark">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SEEEN">
+    <meta name="format-detection" content="telephone=no">
+
+    <title>SEEEN / Audio Player</title>
+
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" href="./icons/icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+    <script>
+      if (/iPhone OS 15[_\d]* like Mac OS X/.test(navigator.userAgent)) {
+        document.documentElement.classList.add("ios15-theme");
+      }
+    </script>
+    <link rel="stylesheet" href="style.css">
+    <script src="player.js" defer></script>
+    <script src="field.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1><img src="./seeen-logo.png" alt="SEEEN"><span>AUDIO PLAYER</span></h1>
+        <div class="unit">EXHIBITION UNIT<small>GRADUATION EXHIBITION</small></div>
+      </header>
+      <section class="field" aria-label="現在の音源">
+        <div id="wave-frame" aria-hidden="true"><svg id="waves" aria-hidden="true" viewBox="-100 -100 200 200" preserveAspectRatio="xMidYMid meet">
+          <g id="rings"></g><circle r="2.4" fill="currentColor"/>
+        </svg></div>
+        <div class="caption"><small>CURRENT SOURCE</small><output id="now-playing">NONE</output></div>
+      </section>
+      <section class="selector" aria-label="音源選択">
+        <button type="button" data-track="bright-wide" aria-pressed="false">BRIGHT / WIDE</button>
+        <button type="button" data-track="bright-narrow" aria-pressed="false">BRIGHT / NARROW</button>
+        <button type="button" data-track="dark-wide" aria-pressed="false">DARK / WIDE</button>
+        <button type="button" data-track="dark-narrow" aria-pressed="false">DARK / NARROW</button>
+      </section>
+      <button id="play-toggle" type="button" aria-label="再生する">PLAY</button>
+      <footer><div><small>PLAYBACK</small><output id="playback-state" data-state="idle">IDLE</output></div><div><small>LOOP</small>ON</div><div><small>OFFLINE</small><button id="offline-status" type="button" disabled>CHECKING</button></div></footer>
+      <p id="error-message" role="alert" hidden></p>
+      <span id="instruction" hidden></span><span id="live-announcement" class="sr" aria-live="polite"></span>
+      <audio id="audio-player" preload="metadata" loop playsinline></audio>
+    </main>
+  </body>
+</html>

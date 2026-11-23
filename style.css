@@ -1,0 +1,90 @@
+@font-face { font-family: Barlow; src: url("./BarlowCondensed-SemiBold.ttf") format("truetype"); font-weight: 600; font-display: swap; }
+* { box-sizing: border-box; }
+html,body { height:100%; margin:0; }
+body { --theme-time:500ms; --status-rule:#888888; --paper:#050505; --ink:#f3f2ef; --muted:#a0a0a0; --line:#666562; background:var(--paper); color:var(--ink); font:600 16px "DIN Condensed VF",Barlow,"Arial Narrow",sans-serif; }
+body.bright { --status-rule:#999999; --paper:#f4f3f0; --ink:#111111; --muted:#555555; --line:#83837e; }
+h1 span, .unit { color:var(--muted); }
+h1 span { margin-left:4px; }
+main { width:100%; max-width:520px; height:100%; min-height:420px; margin:auto; padding:calc(12px + env(safe-area-inset-top)) 16px calc(12px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; }
+header,.selector { border-top:1px solid var(--ink); }
+header { display:flex; justify-content:space-between; align-items:flex-start; padding-top:10px; }
+h1 { margin:0; display:grid; gap:2px; font-size:14px; letter-spacing:.14em; }
+h1 img { width:92px; mix-blend-mode:screen; }
+.bright h1 img { filter:invert(1); mix-blend-mode:multiply; }
+.unit,small { font-size:12px; letter-spacing:.13em; }
+.unit { text-align:right; padding-top:3px; }
+.unit small { margin-top:4px; font-size:10px; letter-spacing:.09em; }
+.field { position:relative; flex:1; min-height:90px; overflow:hidden; margin:4px 0 8px; }
+#wave-frame { position:absolute; top:0; right:0; bottom:0; left:0; }
+#waves { display:block; width:100%; height:100%; }
+.caption { position:absolute; bottom:0; left:0; padding:2px 9px 2px 8px; background:var(--paper); }
+small { display:block; color:var(--muted); }
+.caption output { font-size:24px; letter-spacing:.04em; }
+button { font:inherit; color:inherit; border-radius:0; cursor:pointer; touch-action:manipulation; }
+.selector { display:grid; grid-template-columns:1fr 1fr; gap:4px; padding-top:8px; }
+.selector button { background:transparent; border:1px solid var(--line); min-height:48px; padding:0 10px; display:flex; justify-content:space-between; gap:4px; align-items:center; letter-spacing:.025em; }
+.selector button::after { content:""; width:9px;height:9px;border:1px solid currentColor;border-radius:50%; }
+.selector [aria-pressed="true"],#play-toggle { background:var(--ink);color:var(--paper); border-color:var(--ink); }
+.selector [aria-pressed="true"]::after { background:currentColor; }
+#play-toggle { margin:10px 0; min-height:46px; border:0; font-size:0; }
+#play-toggle::before { content:"";display:inline-block;border:solid transparent;border-width:9px 0 9px 15px;border-left-color:currentColor; }
+#play-toggle[data-playing="true"]::before { height:18px;width:5px;border:solid currentColor;border-width:0 5px; }
+footer { display:grid;grid-template-columns:1.25fr .7fr 1fr; border-block:1px solid var(--status-rule); }
+footer > div { padding-block:6px; }
+footer div+div { border-left:1px solid var(--status-rule);padding-left:12px; }
+footer small { font-size:11px; }
+#offline-status { padding:0;border:0;background:none; color:var(--ink);opacity:1; }
+#offline-status:enabled { text-decoration:underline;min-width:48px;min-height:44px; }
+#error-message { font:13px/1.35 sans-serif;margin:4px 0; }
+.sr { position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%); }
+@media(prefers-reduced-motion:reduce){ * { transition:none!important; } }
+
+/* Feather the last few pixels where wide arcs leave the field. */
+#wave-frame.wide::after {
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  color:var(--paper);
+  transition:color var(--theme-time) ease-in-out;
+  background:
+    linear-gradient(to right, currentColor, transparent 8%, transparent 92%, currentColor),
+    linear-gradient(to bottom, currentColor, transparent 8%, transparent 92%, currentColor);
+}
+
+/* Interpolate painted colors, including controls whose colors invert. */
+body, header, .selector, .selector button, #play-toggle, .caption,
+h1 span, .unit, small, footer, footer > div, #offline-status {
+  transition-property: background-color, color, border-color;
+  transition-duration: var(--theme-time);
+  transition-timing-function: ease-in-out;
+}
+.selector button { background-color:var(--paper); color:var(--ink); }
+.selector button[aria-pressed="true"] { background-color:var(--ink); color:var(--paper); }
+
+/* Keep glyph edges distinct while foreground and paper pass through grey. */
+@keyframes theme-legibility {
+  0%, 100% { text-shadow:0 0 1px transparent; }
+  40%, 60% { text-shadow:0 1px 1px #222, 0 -1px 1px #eee; }
+}
+.theme-changing main { animation:theme-legibility var(--theme-time) ease-in-out; }
+@media(prefers-reduced-motion:reduce){ .theme-changing main { animation:none; } }
+
+/* Keep iOS 15's animated background in one viewport-sized layer. */
+.ios15-theme body { background:#050505; }
+.ios15-theme body::before {
+  content:"";
+  position:fixed;
+  inset:0;
+  background:#f4f3f0;
+  opacity:0;
+  transition:opacity var(--theme-time) ease-in-out;
+  pointer-events:none;
+}
+.ios15-theme body.bright::before { opacity:1; }
+.ios15-theme main { position:relative; }
+.ios15-theme #wave-frame.wide::after { content:none; }
+.ios15-theme .theme-changing main { animation:none; }
+@media(prefers-reduced-motion:reduce) {
+  .ios15-theme body::before { transition:none; }
+}
