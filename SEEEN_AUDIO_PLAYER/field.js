@@ -3,6 +3,7 @@
   "use strict";
   var state = document.getElementById("playback-state");
   var rings = document.getElementById("rings");
+  rings.setAttribute("data-build", "v11");
   var layers = [];
   var reduced = matchMedia("(prefers-reduced-motion: reduce)");
   var elapsed = 0, last = 0, frame = 0, track = "";
@@ -27,6 +28,18 @@
     dot.style.opacity = progress >= .5 ? 1 : .45;
     if (!document.hidden) frame = requestAnimationFrame(cueFrame);
   }
+  // On a concentric circle every point samples the same radial gradient stop.
+  function falloff(x, stops) {
+    for (var k = 1; k < stops.length; k++) {
+      if (x <= stops[k][0]) {
+        var a = stops[k - 1], b = stops[k];
+        return a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]);
+      }
+    }
+    return stops[stops.length - 1][1];
+  }
+  var wideStops = [[0,1],[.42,.93],[.72,.52],[.9,.12],[1,0]];
+  var echoStops = [[0,0],[.25,.12],[.65,.58],[1,1]];
   function draw() {
     var narrow = track.indexOf("narrow") >= 0;
     layers.forEach(function (circle, i) {
@@ -57,6 +70,8 @@
           }
         }
       }
+      if (!narrow) opacity *= falloff(radius / 128.7, wideStops);
+      else if (echo) opacity *= falloff(radius / 61, echoStops);
       circle.setAttribute("r", radius.toFixed(2));
       circle.setAttribute("stroke-opacity", opacity.toFixed(3));
       circle.setAttribute("stroke-width", echo ? ".34" : ".53");
@@ -88,14 +103,11 @@
       elapsed = 0;
       track = next;
       var narrow = track.indexOf("narrow") >= 0;
-      rings.ownerSVGElement.classList.toggle("wide", !narrow);
-      layers.forEach(function (circle, i) {
-        var stroke = narrow ? (i % 2 ? "url(#return-falloff)" : "currentColor") : "url(#wide-falloff)";
-        circle.setAttribute("stroke", stroke);
-      });
+      document.getElementById("wave-frame").classList.toggle("wide", !narrow);
     }
 
     last = 0;
+    if (reduced.matches && track && !elapsed) elapsed = 2300;
     draw();
     if (!document.hidden && !reduced.matches && state.dataset.state === "playing") frame = requestAnimationFrame(tick);
   }
