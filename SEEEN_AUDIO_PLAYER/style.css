@@ -69,3 +69,22 @@ h1 span, .unit, small, footer, footer > div, #offline-status {
 }
 .theme-changing main { animation:theme-legibility var(--theme-time) ease-in-out; }
 @media(prefers-reduced-motion:reduce){ .theme-changing main { animation:none; } }
+
+/* Keep iOS 15's animated background in one viewport-sized layer. */
+.ios15-theme body { background:#050505; }
+.ios15-theme body::before {
+  content:"";
+  position:fixed;
+  inset:0;
+  background:#f4f3f0;
+  opacity:0;
+  transition:opacity var(--theme-time) ease-in-out;
+  pointer-events:none;
+}
+.ios15-theme body.bright::before { opacity:1; }
+.ios15-theme main { position:relative; }
+.ios15-theme #wave-frame.wide::after { content:none; }
+.ios15-theme .theme-changing main { animation:none; }
+@media(prefers-reduced-motion:reduce) {
+  .ios15-theme body::before { transition:none; }
+}

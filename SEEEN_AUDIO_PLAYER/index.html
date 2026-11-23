@@ -15,6 +15,11 @@
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" href="./icons/icon-192.png" type="image/png">
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+    <script>
+      if (/iPhone OS 15[_\d]* like Mac OS X/.test(navigator.userAgent)) {
+        document.documentElement.classList.add("ios15-theme");
+      }
+    </script>
     <link rel="stylesheet" href="style.css">
     <script src="player.js" defer></script>
     <script src="field.js" defer></script>
