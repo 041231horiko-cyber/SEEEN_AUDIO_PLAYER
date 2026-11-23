@@ -1,0 +1,12 @@
+このフォルダの WAV は開発・動作確認専用の短いテスト音です。
+卒業制作「SEEEN」の完成音源ではありません。
+
+完成音源を導入するときは、次の4ファイルを同名で置き換えてください。
+
+- bright_wide_loop.wav
+- bright_narrow_loop.wav
+- dark_wide_loop.wav
+- dark_narrow_loop.wav
+
+置き換え後は service-worker.js の CACHE_VERSION を更新し、3台すべてで
+オンライン起動 → OFFLINE READY 確認 → 機内モード再生テストを行ってください。

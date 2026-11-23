@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+    <meta name="theme-color" content="#000000">
+    <meta name="color-scheme" content="dark">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SEEEN">
+    <meta name="format-detection" content="telephone=no">
+
+    <title>SEEEN / Audio Player</title>
+
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" href="icons/icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+    <link rel="stylesheet" href="style.css">
+    <script src="player.js" defer></script>
+  </head>
+  <body>
+    <main class="app-shell" aria-labelledby="app-title">
+      <header class="masthead">
+        <h1 id="app-title"><span>SEEEN</span><span>AUDIO PLAYER</span></h1>
+        <p class="device-mark">EXHIBITION UNIT</p>
+      </header>
+
+      <section class="selector" aria-label="音源選択">
+        <button class="track-button" type="button" data-track="bright-wide" aria-pressed="false">
+          <span>BRIGHT</span>
+          <span>WIDE</span>
+        </button>
+        <button class="track-button" type="button" data-track="bright-narrow" aria-pressed="false">
+          <span>BRIGHT</span>
+          <span>NARROW</span>
+        </button>
+        <button class="track-button" type="button" data-track="dark-wide" aria-pressed="false">
+          <span>DARK</span>
+          <span>WIDE</span>
+        </button>
+        <button class="track-button" type="button" data-track="dark-narrow" aria-pressed="false">
+          <span>DARK</span>
+          <span>NARROW</span>
+        </button>
+      </section>
+
+      <section class="transport" aria-label="再生操作">
+        <button id="play-toggle" class="play-toggle" type="button" aria-label="再生する">PLAY</button>
+      </section>
+
+      <section class="status-panel" aria-label="再生情報">
+        <div class="status-row">
+          <span>NOW PLAYING</span>
+          <output id="now-playing">NONE</output>
+        </div>
+        <div class="status-row">
+          <span>PLAYBACK</span>
+          <output id="playback-state" data-state="idle">IDLE</output>
+        </div>
+        <div class="status-row">
+          <span>LOOP</span>
+          <output>ON</output>
+        </div>
+        <div class="status-row">
+          <span>OFFLINE</span>
+          <button id="offline-status" class="status-action" type="button" data-state="checking" disabled>CHECKING</button>
+        </div>
+      </section>
+
+      <p id="error-message" class="error-message" role="alert" hidden></p>
+      <p id="instruction" class="instruction">TAP A SOUND FIELD TO START</p>
+
+      <audio id="audio-player" preload="metadata" loop playsinline></audio>
+      <div id="live-announcement" class="visually-hidden" aria-live="polite"></div>
+    </main>
+  </body>
+</html>
