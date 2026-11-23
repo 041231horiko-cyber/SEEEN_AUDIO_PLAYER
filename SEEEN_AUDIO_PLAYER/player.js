@@ -1,21 +1,28 @@
 (function () {
   "use strict";
 
+  var SWITCH_CLICK_ENABLED = true;
+  var COUNT_IN_BPM = 160;
+  // The WAV contains two beats over 0.75 seconds at its native speed.
+  var cueDurationSeconds = 0.75;
+  var cueSource = "audio/ui-switch.wav";
+  var cueOperation = 0;
+
   var TRACKS = {
     "bright-wide": {
-      label: "BRIGHT × WIDE",
+      label: "BRIGHT / WIDE",
       src: "audio/bright_wide_loop.wav"
     },
     "bright-narrow": {
-      label: "BRIGHT × NARROW",
+      label: "BRIGHT / NARROW",
       src: "audio/bright_narrow_loop.wav"
     },
     "dark-wide": {
-      label: "DARK × WIDE",
+      label: "DARK / WIDE",
       src: "audio/dark_wide_loop.wav"
     },
     "dark-narrow": {
-      label: "DARK × NARROW",
+      label: "DARK / NARROW",
       src: "audio/dark_narrow_loop.wav"
     }
   };
@@ -40,7 +47,7 @@
     playbackState.textContent = label || state.toUpperCase();
     playbackState.dataset.state = state;
 
-    var isPlaying = state === "playing";
+    var isPlaying = state === "playing" || state === "counting";
     playToggle.textContent = isPlaying ? "PAUSE" : "PLAY";
     playToggle.setAttribute("aria-label", isPlaying ? "一時停止する" : "再生する");
     playToggle.dataset.playing = isPlaying ? "true" : "false";
@@ -89,26 +96,31 @@
     return Boolean(audio.currentSrc) && audio.currentSrc === expectedSourceUrl();
   }
 
-  async function selectTrack(key) {
+  async function selectTrack(key, skipCue) {
     var track = TRACKS[key];
     if (!track) {
       return;
     }
 
     var thisOperation = ++operationId;
+    var useCue = SWITCH_CLICK_ENABLED && !skipCue && currentTrackKey && currentTrackKey !== key;
+    cueOperation = useCue ? thisOperation : 0;
     switchingOperation = thisOperation;
     clearError();
     setSelectedTrack(key);
-    setPlaybackState("loading", "LOADING");
+    setPlaybackState(useCue ? "counting" : "loading", useCue ? "COUNT IN" : "LOADING");
+    if (!skipCue) document.dispatchEvent(new Event("fieldselection"));
 
     audio.pause();
     audio.removeAttribute("src");
     audio.load();
-    audio.src = track.src;
-    audio.loop = true;
+    audio.src = useCue ? cueSource : track.src;
+    audio.defaultPlaybackRate = useCue ? cueDurationSeconds * COUNT_IN_BPM / (2 * 60) : 1;
+    audio.loop = !useCue;
     audio.load();
 
     try {
+      audio.playbackRate = audio.defaultPlaybackRate;
       audio.currentTime = 0;
     } catch (error) {
       // Safari may reject seeking until metadata is available. A new source starts at zero.
@@ -124,6 +136,7 @@
         return;
       }
 
+      if (useCue) return;
       setPlaybackState("playing", "PLAYING");
       announcement.textContent = track.label + " を再生中";
     } catch (error) {
@@ -149,6 +162,17 @@
   async function togglePlayback() {
     if (!currentTrackKey) {
       await selectTrack("bright-wide");
+      return;
+    }
+
+    if (cueOperation) {
+      if (playbackState.dataset.state === "counting") {
+        operationId++;
+        audio.pause();
+        setPlaybackState("paused", "PAUSED");
+      } else {
+        await selectTrack(currentTrackKey, true);
+      }
       return;
     }
 
@@ -208,6 +232,10 @@
   }
 
   function setOfflineState(state, label, retryable) {
+    var scope = serviceWorkerRegistration && serviceWorkerRegistration.scope;
+    console.info("[SEEEN offline]", {status: label, url: location.href, secure: window.isSecureContext,
+      supported: "serviceWorker" in navigator, scope: scope, inScope: !!scope && location.href.startsWith(scope),
+      controller: navigator.serviceWorker && navigator.serviceWorker.controller && navigator.serviceWorker.controller.scriptURL});
     offlineStatus.textContent = label;
     offlineStatus.dataset.state = state;
     offlineStatus.disabled = !retryable;
@@ -221,7 +249,7 @@
         return;
       }
 
-      var worker = serviceWorkerRegistration.active || serviceWorkerRegistration.waiting || serviceWorkerRegistration.installing;
+      var worker = navigator.serviceWorker.controller || serviceWorkerRegistration.active || serviceWorkerRegistration.waiting || serviceWorkerRegistration.installing;
       if (!worker) {
         reject(new Error("Service Worker is not active"));
         return;
@@ -234,6 +262,7 @@
 
       channel.port1.onmessage = function (event) {
         window.clearTimeout(timeout);
+        console.info("[SEEEN offline] " + type, event.data);
         resolve(event.data);
       };
 
@@ -242,9 +271,10 @@
   }
 
   async function checkOfflineStatus() {
+    setOfflineState("checking", "CHECKING", false);
     try {
       var result = await sendServiceWorkerMessage("CHECK_OFFLINE_STATUS");
-      if (result && result.ready) {
+      if (result && result.ready && result.switchCueCached === true) {
         setOfflineState("ready", "READY", false);
         return true;
       }
@@ -266,7 +296,7 @@
 
     try {
       var result = await sendServiceWorkerMessage("CACHE_ALL_ASSETS");
-      if (!result || !result.ready) {
+      if (!result || !result.ready || !result.switchCueCached) {
         throw new Error("Cache incomplete");
       }
       setOfflineState("ready", "READY", false);
@@ -278,21 +308,41 @@
   }
 
   async function registerServiceWorker() {
-    if (!("serviceWorker" in navigator)) {
+    if (!window.isSecureContext || location.protocol === "file:" || !("serviceWorker" in navigator)) {
       setOfflineState("error", "UNAVAILABLE", false);
-      showError("このブラウザではオフライン機能を利用できません。iOS Safari で開いてください。");
+      showError("このブラウザではオフライン機能を利用できません。HTTPS または localhost で開いてください。");
       return;
     }
 
-    setOfflineState("checking", "SAVING", false);
+    setOfflineState("checking", "CHECKING", false);
 
     try {
       serviceWorkerRegistration = await navigator.serviceWorker.register("./service-worker.js", { scope: "./" });
-      serviceWorkerRegistration = await navigator.serviceWorker.ready;
+      if (!serviceWorkerRegistration.active) {
+        var installing = serviceWorkerRegistration.installing || serviceWorkerRegistration.waiting;
+        if (!installing) throw new Error("No worker available");
+        await new Promise(function (resolve, reject) {
+          function changed() {
+            if (installing.state === "activated" || installing.state === "redundant") {
+              installing.removeEventListener("statechange", changed);
+              if (installing.state === "activated") resolve();
+              else reject(new Error("Installation failed"));
+            }
+          }
+          installing.addEventListener("statechange", changed);
+          changed();
+        });
+      }
       await checkOfflineStatus();
     } catch (error) {
-      setOfflineState("error", "UNAVAILABLE", false);
-      showError("オフライン機能を開始できません。HTTPS または localhost で開いてください。");
+      console.warn("[SEEEN offline] registration", error);
+      if (navigator.serviceWorker.controller) {
+        serviceWorkerRegistration = await navigator.serviceWorker.getRegistration();
+        await checkOfflineStatus();
+      } else {
+        setOfflineState("incomplete", "RETRY", true);
+        showError("保存を開始できません。オンラインで RETRY をタップしてください。");
+      }
     }
   }
 
@@ -303,7 +353,15 @@
   });
 
   playToggle.addEventListener("click", togglePlayback);
-  offlineStatus.addEventListener("click", repairOfflineCache);
+  offlineStatus.addEventListener("click", function () {
+    if (serviceWorkerRegistration && serviceWorkerRegistration.active) repairOfflineCache();
+    else registerServiceWorker();
+  });
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (serviceWorkerRegistration) checkOfflineStatus();
+    });
+  }
 
   audio.addEventListener("play", function () {
     if (!switchingOperation && isExpectedSource()) {
@@ -312,7 +370,7 @@
   });
 
   audio.addEventListener("pause", function () {
-    if (!switchingOperation && currentTrackKey && !audio.ended && playbackState.dataset.state === "playing") {
+    if (audio.paused && !switchingOperation && currentTrackKey && !audio.ended && playbackState.dataset.state === "playing") {
       setPlaybackState("paused", "PAUSED");
     }
   });
@@ -337,7 +395,7 @@
   });
 
   audio.addEventListener("error", function () {
-    if (!currentTrackKey || !isExpectedSource()) {
+    if (!audio.error || (!cueOperation && !isExpectedSource())) {
       return;
     }
     setPlaybackState("error", "ERROR");
@@ -345,17 +403,23 @@
   });
 
   audio.addEventListener("ended", function () {
-    if (!currentTrackKey) {
+    if (!audio.ended || !currentTrackKey) return;
+    if (cueOperation === operationId && audio.currentSrc === new URL(cueSource, document.baseURI).href) {
+      selectTrack(currentTrackKey, true);
       return;
     }
+    if (!isExpectedSource()) return;
+    var endedOperation = operationId;
     audio.currentTime = 0;
     audio.play().catch(function () {
+      if (operationId !== endedOperation) return;
       setPlaybackState("error", "ERROR");
       showError("ループ再開に失敗しました。音源ボタンをタップして復旧してください。");
     });
   });
 
   document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && serviceWorkerRegistration && offlineStatus.dataset.state !== "checking") checkOfflineStatus();
     if (document.visibilityState === "visible" && currentTrackKey && audio.paused && playbackState.dataset.state === "playing") {
       setPlaybackState("paused", "PAUSED");
       showError("OSにより再生が停止しました。PLAY をタップして再開してください。");
@@ -363,7 +427,7 @@
   });
 
   window.addEventListener("online", function () {
-    if (offlineStatus.dataset.state !== "ready") {
+    if (serviceWorkerRegistration && offlineStatus.dataset.state === "incomplete") {
       checkOfflineStatus();
     }
   });
