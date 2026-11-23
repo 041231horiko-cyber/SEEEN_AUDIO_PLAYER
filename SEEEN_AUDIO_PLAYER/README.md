@@ -37,7 +37,7 @@ Safariで <http://localhost:8080> を開きます。`localhost` はService Worke
 | DARK × WIDE | `dark_wide_loop.wav` |
 | DARK × NARROW | `dark_narrow_loop.wav` |
 
-差し替えたら、`service-worker.js` 冒頭の `CACHE_VERSION` を `seeen-audio-v5` のように必ず更新してください。同じURLのままバージョンを変えないと、端末にテスト音が残る可能性があります。旧キャッシュは再生中の音源を不意に消さないため自動削除しません。
+差し替えたら、`service-worker.js` 冒頭の `CACHE_VERSION` を `seeen-audio-v6` のように必ず更新してください。同じURLのままバージョンを変えないと、端末にテスト音が残る可能性があります。旧キャッシュは再生中の音源を不意に消さないため自動削除しません。
 
 ### WAV容量について
 
@@ -70,6 +70,10 @@ Safariで <http://localhost:8080> を開きます。`localhost` はService Worke
 `OFFLINE READY` は、アプリ本体・アイコン・4音源が現在のキャッシュにすべて存在するときだけ表示されます。`RETRY` の場合はオンラインへ戻してタップします。
 
 Safariの操作バーが表示される場合は、Safari内のタブを開いていないか確認してください。専用表示になるのはホーム画面のSEEENアイコンから起動したときだけです。以前のアイコンが残っている場合はそのアイコンを削除し、最新版をHTTPSで開いてから「ホーム画面に追加」をやり直してください。
+
+### ホーム画面アイコンを更新した場合
+
+iOSはホーム画面アイコンを強くキャッシュします。GitHub Pagesへの更新完了後、iPhoneのホーム画面にある既存のSEEENアイコンを一度削除してください。その後、SafariでHTTPSの公開URLを開き、`OFFLINE READY`を確認してから、共有メニューの「ホーム画面に追加」でSEEENを追加し直します。削除と再追加を行わない場合、以前のアイコンが表示され続けることがあります。
 
 ## 展示前の端末設定
 

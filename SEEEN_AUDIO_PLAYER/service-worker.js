@@ -1,13 +1,14 @@
 "use strict";
 
 // 完成音源を同じファイル名で差し替えたら、この値を必ず更新する。
-var CACHE_VERSION = "seeen-audio-v4";
+var CACHE_VERSION = "seeen-audio-v5";
 var APP_ASSETS = [
   "./",
   "./index.html",
   "./style.css",
   "./player.js",
   "./manifest.json",
+  "./icons/apple-touch-icon.png",
   "./icons/icon-180.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png"
