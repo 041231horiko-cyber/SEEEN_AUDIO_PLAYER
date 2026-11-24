@@ -130,19 +130,23 @@
     this.scale = 1;
     this.running = false;
     this.frame = 0;
-    this.startedAt = 0;
-    this.baseTime = 0;
+    this.lastFrameAt = 0;
     this.stats = {
       wideCount: this.wide.length,
       narrowCount: this.narrow.length,
       initializationMs: now() - started,
       lastRenderMs: 0,
-      devicePixelRatio: 1
+      devicePixelRatio: 1,
+      loopStarts: 0,
+      loopFrames: 0
     };
     this.resize();
     this.canvas.dataset.wideCount = String(this.wide.length);
     this.canvas.dataset.narrowCount = String(this.narrow.length);
     this.canvas.dataset.initializationMs = this.stats.initializationMs.toFixed(3);
+    this.canvas.dataset.running = "false";
+    this.canvas.dataset.loopStarts = "0";
+    this.canvas.dataset.loopFrames = "0";
   }
 
   ParticleField.prototype.resize = function () {
@@ -226,33 +230,47 @@
     var self = this;
     var settings = options || {};
 
-    this.stop();
+    if (this.running) return false;
     this.setMode(settings.mode || this.mode);
     if (settings.theme) {
       this.theme = settings.theme === "bright" ? "bright" : "dark";
     }
-    this.baseTime = Number.isFinite(settings.time) ? settings.time : this.time;
-    this.startedAt = now();
+    this.time = Number.isFinite(settings.time) ? settings.time : this.time;
+    this.scale = Number.isFinite(settings.scale) ? settings.scale : this.scale;
+    this.lastFrameAt = 0;
     this.running = true;
+    this.stats.loopStarts += 1;
+    this.canvas.dataset.running = "true";
+    this.canvas.dataset.loopStarts = String(this.stats.loopStarts);
 
     function drawFrame(timestamp) {
+      var delta;
       if (!self.running) return;
+      if (!self.lastFrameAt) self.lastFrameAt = timestamp;
+      delta = Math.min(Math.max(timestamp - self.lastFrameAt, 0), 50) * 0.001;
+      self.lastFrameAt = timestamp;
+      self.time += delta;
+      self.stats.loopFrames += 1;
+      self.canvas.dataset.loopFrames = String(self.stats.loopFrames);
       self.render({
         mode: self.mode,
         theme: self.theme,
-        time: self.baseTime + (timestamp - self.startedAt) / 1000,
+        time: self.time,
         scale: self.scale
       });
       self.frame = requestAnimationFrame(drawFrame);
     }
 
     this.frame = requestAnimationFrame(drawFrame);
+    return true;
   };
 
   ParticleField.prototype.stop = function () {
     this.running = false;
     cancelAnimationFrame(this.frame);
     this.frame = 0;
+    this.lastFrameAt = 0;
+    this.canvas.dataset.running = "false";
   };
 
   var canvas = document.getElementById("particle-field");
@@ -290,7 +308,7 @@
     var requestedTime = Number(parameters.get("particle-time"));
     var time = Number.isFinite(requestedTime) ? requestedTime : 0;
 
-    if (mode !== "wide" && mode !== "narrow") return;
+    if (mode !== "wide" && mode !== "narrow") return false;
     document.body.classList.add("particle-preview");
     document.body.classList.toggle("bright", theme === "bright");
     renderer.render({ mode: mode, theme: theme, time: time, scale: 1 });
@@ -298,7 +316,58 @@
     window.addEventListener("resize", function () {
       renderer.render({ mode: mode, theme: theme, time: time, scale: 1 });
     });
+    return true;
   }
 
-  renderStaticPreview();
+  function bindWideMotion() {
+    var state = document.getElementById("playback-state");
+    var selector = document.querySelector(".selector");
+    var activeTrack = "";
+
+    function syncWideMotion() {
+      var selected = document.querySelector('[data-track][aria-pressed="true"]');
+      var track = selected ? selected.dataset.track : "";
+      var wide = track.indexOf("wide") >= 0;
+      var theme = track.indexOf("bright") === 0 ? "bright" : "dark";
+      var changed = track !== activeTrack;
+
+      document.body.classList.toggle("particle-wide", wide);
+
+      if (!wide) {
+        renderer.stop();
+        activeTrack = track;
+        return;
+      }
+
+      if (changed) {
+        renderer.stop();
+        renderer.time = 0;
+        renderer.scale = 1;
+        renderer.render({ mode: "wide", theme: theme, time: 0, scale: 1 });
+      } else if (renderer.theme !== theme) {
+        renderer.render({ mode: "wide", theme: theme, time: renderer.time, scale: 1 });
+      }
+      activeTrack = track;
+
+      if (document.hidden || state.dataset.state !== "playing") {
+        renderer.stop();
+        return;
+      }
+
+      renderer.start({ mode: "wide", theme: theme, time: renderer.time, scale: 1 });
+    }
+
+    var observer = new MutationObserver(syncWideMotion);
+    observer.observe(state, { attributes: true, attributeFilter: ["data-state"] });
+    observer.observe(selector, { subtree: true, attributes: true, attributeFilter: ["aria-pressed"] });
+    document.addEventListener("fieldselection", syncWideMotion);
+    document.addEventListener("visibilitychange", syncWideMotion);
+    window.addEventListener("resize", function () {
+      if (!document.body.classList.contains("particle-wide")) return;
+      renderer.render({ mode: "wide", theme: renderer.theme, time: renderer.time, scale: 1 });
+    });
+    syncWideMotion();
+  }
+
+  if (!renderStaticPreview()) bindWideMotion();
 }());

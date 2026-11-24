@@ -93,6 +93,14 @@
       document.body.classList.add("theme-changing");
       document.body.classList.toggle("bright", bright);
     }
+    if (next.indexOf("wide") >= 0) {
+      rings.style.opacity = 1;
+      dot.style.opacity = 1;
+      elapsed = 0;
+      last = 0;
+      track = next;
+      return;
+    }
     if (state.dataset.state === "counting") {
       if (!document.hidden) frame = requestAnimationFrame(cueFrame);
       return;
