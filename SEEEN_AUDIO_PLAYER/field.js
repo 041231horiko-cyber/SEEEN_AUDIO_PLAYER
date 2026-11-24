@@ -1,6 +1,7 @@
 // Attribute-driven visual prototype. The audio player owns playback.
 (function () {
   "use strict";
+  if (document.body.classList.contains("particle-preview")) return;
   var state = document.getElementById("playback-state");
   var rings = document.getElementById("rings");
   var layers = [];

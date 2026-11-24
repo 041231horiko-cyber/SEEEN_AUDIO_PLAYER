@@ -24,6 +24,9 @@ body.bright { --background:#F2F2F0; --panel:#E3E3E1; --inactive:#D1D1CF; --prima
   transform-origin:center;
 }
 main { position:relative; width:100%; max-width:none; height:100%; min-height:0; margin:0; padding:0; }
+#particle-field { position:absolute; inset:0; display:none; width:667px; height:375px; pointer-events:none; }
+.particle-preview #particle-field { display:block; }
+.particle-preview #wave-frame { display:none; }
 #orientation-notice {
   display:none;
   position:absolute;
