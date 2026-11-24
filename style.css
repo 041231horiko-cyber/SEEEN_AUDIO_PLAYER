@@ -83,6 +83,16 @@ body, header, .selector, .selector button, #play-toggle, .caption,
 }
 .ios15-theme body.bright::before { opacity:1; }
 .ios15-theme main { position:relative; }
+/* Keep both transparent logo images in the same grid cell throughout the fade. */
+.ios15-theme h1 .brand-logo {
+  display:block;
+  grid-area:1 / 1;
+  transition:opacity var(--theme-time) ease-in-out;
+}
+.ios15-theme .brand-logo-bright,
+.ios15-theme .bright .brand-logo-dark { opacity:0; }
+.ios15-theme .brand-logo-dark,
+.ios15-theme .bright .brand-logo-bright { opacity:1; }
 /* Expose the viewport fade instead of painting a second paper-colored tile. */
 .ios15-theme .caption,
 .ios15-theme .selector button:not([aria-pressed="true"]) {
