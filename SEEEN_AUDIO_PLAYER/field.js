@@ -93,7 +93,7 @@
       document.body.classList.add("theme-changing");
       document.body.classList.toggle("bright", bright);
     }
-    if (next.indexOf("wide") >= 0) {
+    if (next) {
       rings.style.opacity = 1;
       dot.style.opacity = 1;
       elapsed = 0;

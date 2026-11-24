@@ -319,21 +319,21 @@
     return true;
   }
 
-  function bindWideMotion() {
+  function bindParticleMotion() {
     var state = document.getElementById("playback-state");
     var selector = document.querySelector(".selector");
     var activeTrack = "";
 
-    function syncWideMotion() {
+    function syncParticleMotion() {
       var selected = document.querySelector('[data-track][aria-pressed="true"]');
       var track = selected ? selected.dataset.track : "";
-      var wide = track.indexOf("wide") >= 0;
+      var mode = track.indexOf("narrow") >= 0 ? "narrow" : track.indexOf("wide") >= 0 ? "wide" : "";
       var theme = track.indexOf("bright") === 0 ? "bright" : "dark";
       var changed = track !== activeTrack;
 
-      document.body.classList.toggle("particle-wide", wide);
+      document.body.classList.toggle("particle-active", Boolean(mode));
 
-      if (!wide) {
+      if (!mode) {
         renderer.stop();
         activeTrack = track;
         return;
@@ -343,9 +343,9 @@
         renderer.stop();
         renderer.time = 0;
         renderer.scale = 1;
-        renderer.render({ mode: "wide", theme: theme, time: 0, scale: 1 });
+        renderer.render({ mode: mode, theme: theme, time: 0, scale: 1 });
       } else if (renderer.theme !== theme) {
-        renderer.render({ mode: "wide", theme: theme, time: renderer.time, scale: 1 });
+        renderer.render({ mode: mode, theme: theme, time: renderer.time, scale: 1 });
       }
       activeTrack = track;
 
@@ -354,20 +354,20 @@
         return;
       }
 
-      renderer.start({ mode: "wide", theme: theme, time: renderer.time, scale: 1 });
+      renderer.start({ mode: mode, theme: theme, time: renderer.time, scale: 1 });
     }
 
-    var observer = new MutationObserver(syncWideMotion);
+    var observer = new MutationObserver(syncParticleMotion);
     observer.observe(state, { attributes: true, attributeFilter: ["data-state"] });
     observer.observe(selector, { subtree: true, attributes: true, attributeFilter: ["aria-pressed"] });
-    document.addEventListener("fieldselection", syncWideMotion);
-    document.addEventListener("visibilitychange", syncWideMotion);
+    document.addEventListener("fieldselection", syncParticleMotion);
+    document.addEventListener("visibilitychange", syncParticleMotion);
     window.addEventListener("resize", function () {
-      if (!document.body.classList.contains("particle-wide")) return;
-      renderer.render({ mode: "wide", theme: renderer.theme, time: renderer.time, scale: 1 });
+      if (!document.body.classList.contains("particle-active")) return;
+      renderer.render({ mode: renderer.mode, theme: renderer.theme, time: renderer.time, scale: 1 });
     });
-    syncWideMotion();
+    syncParticleMotion();
   }
 
-  if (!renderStaticPreview()) bindWideMotion();
+  if (!renderStaticPreview()) bindParticleMotion();
 }());
