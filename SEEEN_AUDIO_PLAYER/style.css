@@ -8,10 +8,13 @@ main { width:100%; max-width:520px; height:100%; min-height:420px; margin:auto; 
 header,.selector { border-top:1px solid var(--ink); }
 header { display:flex; justify-content:space-between; align-items:flex-start; padding-top:10px; }
 h1 { margin:0; display:grid; gap:2px; width:92px; background:transparent; }
-.brand-outline { display:none; }
-.brand-logo { display:block; width:100%; height:auto; background:transparent; }
-.brand-logo-bright, .bright .brand-logo-dark { display:none; }
-.bright .brand-logo-bright { display:block; }
+.brand-outline {
+  display:block;
+  width:100%;
+  height:auto;
+  fill:var(--ink);
+  transition:fill var(--theme-time) ease-in-out;
+}
 .brand-caption, .unit, small { font-size:12px; font-weight:600; color:var(--muted); letter-spacing:.13em; }
 .brand-caption { fill:currentColor; letter-spacing:normal; }
 .unit { text-align:right; padding-top:3px; }
@@ -84,15 +87,6 @@ body, header, .selector, .selector button, #play-toggle, .caption,
 }
 .ios15-theme body.bright::before { opacity:1; }
 .ios15-theme main { position:relative; }
-/* Paint only the logo paths over the viewport fade on iOS 15. */
-.ios15-theme h1 .brand-logo { display:none; }
-.ios15-theme .brand-outline {
-  display:block;
-  width:100%;
-  height:auto;
-  fill:var(--ink);
-  transition:fill var(--theme-time) ease-in-out;
-}
 /* Expose the viewport fade instead of painting a second paper-colored tile. */
 .ios15-theme .caption,
 .ios15-theme .selector button:not([aria-pressed="true"]) {
