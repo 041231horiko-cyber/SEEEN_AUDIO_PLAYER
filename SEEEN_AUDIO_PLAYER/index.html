@@ -47,21 +47,23 @@
         </h1>
         <div class="unit">EXHIBITION UNIT</div>
       </header>
-      <section class="field" aria-label="現在の音源">
+      <section class="field" aria-label="ビジュアライザー">
         <div id="wave-frame" aria-hidden="true"><svg id="waves" aria-hidden="true" viewBox="-100 -100 200 200" preserveAspectRatio="xMidYMid meet">
           <g id="rings"></g><circle r="2.4" fill="currentColor"/>
         </svg></div>
+      </section>
+      <section class="controls" aria-label="プレイヤー操作">
         <div class="caption"><small>CURRENT SOURCE</small><output id="now-playing">NONE</output></div>
+        <section class="selector" aria-label="音源選択">
+          <button type="button" data-track="bright-wide" aria-pressed="false">BRIGHT / WIDE</button>
+          <button type="button" data-track="bright-narrow" aria-pressed="false">BRIGHT / NARROW</button>
+          <button type="button" data-track="dark-wide" aria-pressed="false">DARK / WIDE</button>
+          <button type="button" data-track="dark-narrow" aria-pressed="false">DARK / NARROW</button>
+        </section>
+        <button id="play-toggle" type="button" aria-label="再生する">PLAY</button>
+        <footer><div><small>PLAYBACK</small><output id="playback-state" data-state="idle">IDLE</output></div><div><small>LOOP</small>ON</div><div><small>OFFLINE</small><button id="offline-status" type="button" disabled>CHECKING</button></div></footer>
+        <p id="error-message" role="alert" hidden></p>
       </section>
-      <section class="selector" aria-label="音源選択">
-        <button type="button" data-track="bright-wide" aria-pressed="false">BRIGHT / WIDE</button>
-        <button type="button" data-track="bright-narrow" aria-pressed="false">BRIGHT / NARROW</button>
-        <button type="button" data-track="dark-wide" aria-pressed="false">DARK / WIDE</button>
-        <button type="button" data-track="dark-narrow" aria-pressed="false">DARK / NARROW</button>
-      </section>
-      <button id="play-toggle" type="button" aria-label="再生する">PLAY</button>
-      <footer><div><small>PLAYBACK</small><output id="playback-state" data-state="idle">IDLE</output></div><div><small>LOOP</small>ON</div><div><small>OFFLINE</small><button id="offline-status" type="button" disabled>CHECKING</button></div></footer>
-      <p id="error-message" role="alert" hidden></p>
       <span id="instruction" hidden></span><span id="live-announcement" class="sr" aria-live="polite"></span>
       <audio id="audio-player" preload="metadata" loop playsinline></audio>
     </main>
