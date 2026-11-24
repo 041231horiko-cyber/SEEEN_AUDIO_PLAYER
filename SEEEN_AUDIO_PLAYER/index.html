@@ -25,6 +25,8 @@
     <script src="field.js" defer></script>
   </head>
   <body>
+    <div id="app-shell">
+    <div id="app-stage">
     <main>
       <header>
         <h1 aria-label="SEEEN AUDIO PLAYER">
@@ -63,5 +65,48 @@
       <span id="instruction" hidden></span><span id="live-announcement" class="sr" aria-live="polite"></span>
       <audio id="audio-player" preload="metadata" loop playsinline></audio>
     </main>
+    </div>
+    <div id="orientation-notice" role="status" aria-live="polite">
+      <strong>LANDSCAPE REQUIRED</strong>
+      <span>端末を横向きにしてください</span>
+    </div>
+    </div>
+    <script>
+      (function () {
+        "use strict";
+        var DESIGN_WIDTH = 667;
+        var DESIGN_HEIGHT = 375;
+        var shell = document.getElementById("app-shell");
+        var stage = document.getElementById("app-stage");
+
+        function updateStageScale() {
+          var viewport = window.visualViewport;
+          var styles;
+          var availableWidth;
+          var availableHeight;
+          var scale;
+
+          shell.style.left = (viewport ? viewport.offsetLeft : 0) + "px";
+          shell.style.top = (viewport ? viewport.offsetTop : 0) + "px";
+          shell.style.width = (viewport ? viewport.width : window.innerWidth) + "px";
+          shell.style.height = (viewport ? viewport.height : window.innerHeight) + "px";
+          styles = window.getComputedStyle(shell);
+          availableWidth = shell.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight);
+          availableHeight = shell.clientHeight - parseFloat(styles.paddingTop) - parseFloat(styles.paddingBottom);
+          scale = Math.min(availableWidth / DESIGN_WIDTH, availableHeight / DESIGN_HEIGHT);
+          stage.style.left = (parseFloat(styles.paddingLeft) + availableWidth / 2) + "px";
+          stage.style.top = (parseFloat(styles.paddingTop) + availableHeight / 2) + "px";
+          stage.style.setProperty("--stage-scale", String(Math.max(scale, 0)));
+        }
+
+        window.addEventListener("resize", updateStageScale);
+        window.addEventListener("orientationchange", updateStageScale);
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener("resize", updateStageScale);
+          window.visualViewport.addEventListener("scroll", updateStageScale);
+        }
+        updateStageScale();
+      }());
+    </script>
   </body>
 </html>
