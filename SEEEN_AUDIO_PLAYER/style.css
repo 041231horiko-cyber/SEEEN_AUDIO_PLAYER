@@ -1,7 +1,6 @@
-@font-face { font-family: Barlow; src: url("./BarlowCondensed-SemiBold.ttf") format("truetype"); font-weight: 600; font-display: swap; }
 * { box-sizing: border-box; }
 html,body { width:100%; height:100%; margin:0; overflow:hidden; }
-body { --theme-time:500ms; --background:#080808; --panel:#1B1B1B; --inactive:#303030; --primary:#EEEEEC; --muted:#AAAAAA; --yes:#65C98A; --no:#E66B6B; min-height:100%; background:var(--background); color:var(--primary); font:600 16px "DIN Condensed VF",Barlow,"Arial Narrow",sans-serif; }
+body { --theme-time:500ms; --background:#080808; --panel:#1B1B1B; --inactive:#303030; --primary:#EEEEEC; --muted:#AAAAAA; --yes:#65C98A; --no:#E66B6B; min-height:100%; background:var(--background); color:var(--primary); font:500 16px "Helvetica Neue",Helvetica,Arial,sans-serif; }
 body.bright { --background:#F2F2F0; --panel:#E3E3E1; --inactive:#D1D1CF; --primary:#101010; --muted:#666666; --yes:#238548; --no:#C43C3C; }
 
 #app-shell {
@@ -40,42 +39,43 @@ main { position:relative; width:100%; max-width:none; height:100%; min-height:0;
 }
 #orientation-notice strong { font-size:18px; letter-spacing:.06em; }
 #orientation-notice span { color:var(--muted); font-size:13px; }
-header { border-top:1px solid var(--primary); }
-header { position:absolute; top:22px; left:22px; right:22px; display:flex; justify-content:space-between; align-items:flex-start; padding-top:6px; }
-h1 { margin:0; display:grid; gap:2px; width:92px; background:transparent; }
+header { position:absolute; inset:0; }
+h1 { position:absolute; left:22px; top:22px; width:97px; height:54px; margin:0; background:transparent; }
 .brand-outline {
+  position:absolute;
+  left:0;
+  top:0;
   display:block;
-  width:100%;
+  width:97px;
   height:auto;
   fill:var(--primary);
   transition:fill var(--theme-time) ease-in-out;
 }
-.brand-caption, .unit, small { font-size:12px; font-weight:600; color:var(--muted); letter-spacing:.13em; }
-.brand-caption { fill:currentColor; letter-spacing:normal; }
-.unit { text-align:right; padding-top:3px; }
+.brand-caption { position:absolute; left:0; top:40px; width:97px; height:14px; overflow:visible; fill:var(--muted); font:500 10px "Helvetica Neue",Helvetica,Arial,sans-serif; transition:fill var(--theme-time) ease-in-out; }
+.unit { position:absolute; right:22px; top:24px; color:var(--muted); font-size:10px; font-weight:500; line-height:12px; letter-spacing:1.35px; text-align:right; }
 .field { position:absolute; left:12px; top:75px; width:376px; height:270px; overflow:hidden; margin:0; }
 #wave-frame { position:absolute; top:0; right:0; bottom:0; left:0; }
 #waves { display:block; width:100%; height:100%; }
 .controls { position:absolute; left:400px; top:75px; width:245px; height:270px; padding:16px; border-radius:27px; background:var(--panel); }
 .caption { position:absolute; left:16px; top:21px; right:16px; padding:0; background:transparent; }
 small { display:block; }
-.caption small { font-size:10px; letter-spacing:.11em; }
-.caption output { display:block; margin-top:1px; font-size:21px; font-weight:700; letter-spacing:-.03em; line-height:25px; white-space:nowrap; }
+.caption small { color:var(--muted); font-size:10px; font-weight:500; letter-spacing:1.1px; }
+.caption output { display:block; margin-top:1px; font-size:21px; font-weight:700; letter-spacing:-0.6px; line-height:25px; white-space:nowrap; }
 button { font:inherit; color:inherit; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
 .selector { position:absolute; top:74px; left:16px; right:16px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
-.selector button { height:45px; min-width:0; padding:0; display:grid; place-items:center; border:0; border-radius:22.5px; background:var(--inactive); color:var(--primary); font-size:9.5px; letter-spacing:0; text-align:center; white-space:nowrap; }
+.selector button { height:45px; min-width:0; padding:0; display:grid; place-items:center; border:0; border-radius:22.5px; background:var(--inactive); color:var(--primary); font-size:9.5px; font-weight:600; letter-spacing:0; text-align:center; white-space:nowrap; }
 .selector button[aria-pressed="true"] { background:var(--primary); color:var(--background); }
 #play-toggle { position:absolute; left:37.75px; top:189px; width:60px; height:60px; margin:0; padding:0; display:grid; place-items:center; border:0; border-radius:50%; background:var(--primary); color:var(--background); font-size:0; }
 #play-toggle::before { content:"";display:inline-block;border:solid transparent;border-width:9px 0 9px 15px;border-left-color:currentColor; }
 #play-toggle[data-playing="true"]::before { height:18px;width:5px;border:solid currentColor;border-width:0 5px; }
-footer { position:absolute; left:145px; top:194px; display:grid; grid-auto-rows:17px; color:var(--muted); font-size:10px; font-weight:500; letter-spacing:.065em; text-align:left; }
+footer { position:absolute; left:145px; top:194px; display:grid; grid-auto-rows:17px; color:var(--muted); font-size:10px; font-weight:500; letter-spacing:0.65px; text-align:left; }
 footer > div { height:17px; display:flex; align-items:center; gap:8px; white-space:nowrap; }
 footer i { width:5.2px; height:5.2px; flex:0 0 5.2px; border-radius:50%; background:var(--muted); transition:background-color var(--theme-time) ease-in-out; }
 footer > div[data-indicator="yes"] i { background:var(--yes); }
 footer > div[data-indicator="no"] i { background:var(--no); }
 #offline-status { min-width:0; min-height:0; padding:0; border:0; background:none; color:inherit; opacity:1; letter-spacing:inherit; }
 #offline-status:enabled { min-width:0; min-height:17px; text-decoration:underline; }
-#error-message { position:absolute; left:0; right:0; bottom:0; z-index:1; padding:4px; background:var(--background); font:13px/1.35 sans-serif; margin:0; }
+#error-message { position:absolute; left:0; right:0; bottom:0; z-index:1; padding:4px; background:var(--background); font:500 13px/1.35 "Helvetica Neue",Helvetica,Arial,sans-serif; margin:0; }
 .sr { position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%); }
 @media(prefers-reduced-motion:reduce){ * { transition:none!important; } }
 
