@@ -50,7 +50,6 @@
 
     var isPlaying = state === "playing" || state === "counting";
     playbackState.parentElement.dataset.indicator = isPlaying ? "yes" : state === "loading" ? "pending" : "no";
-    playToggle.textContent = isPlaying ? "PAUSE" : "PLAY";
     playToggle.setAttribute("aria-label", isPlaying ? "一時停止する" : "再生する");
     playToggle.dataset.playing = isPlaying ? "true" : "false";
   }

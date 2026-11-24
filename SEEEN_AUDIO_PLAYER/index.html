@@ -60,7 +60,12 @@
           <button type="button" data-track="dark-wide" aria-pressed="false">DARK / WIDE</button>
           <button type="button" data-track="dark-narrow" aria-pressed="false">DARK / NARROW</button>
         </section>
-        <button id="play-toggle" type="button" aria-label="再生する">PLAY</button>
+        <button id="play-toggle" type="button" aria-label="再生する">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path class="play-icon" d="M5 2L22 12L5 22Z"/>
+            <path class="pause-icon" d="M5 2H10V22H5ZM14 2H19V22H14Z"/>
+          </svg>
+        </button>
         <footer aria-label="再生ステータス">
           <div data-indicator="no"><i aria-hidden="true"></i><output id="playback-state" data-state="idle">IDLE</output></div>
           <div id="loop-status" data-indicator="yes"><i aria-hidden="true"></i><span>LOOP</span></div>
