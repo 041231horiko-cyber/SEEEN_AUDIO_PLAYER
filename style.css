@@ -7,9 +7,10 @@ body.bright { --status-rule:#999999; --paper:#f4f3f0; --ink:#111111; --muted:#55
 main { width:100%; max-width:520px; height:100%; min-height:420px; margin:auto; padding:calc(12px + env(safe-area-inset-top)) 16px calc(12px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; }
 header,.selector { border-top:1px solid var(--ink); }
 header { display:flex; justify-content:space-between; align-items:flex-start; padding-top:10px; }
-h1 { margin:0; display:grid; gap:2px; width:92px; }
-h1 img { width:92px; mix-blend-mode:screen; }
-.bright h1 img { filter:invert(1); mix-blend-mode:multiply; }
+h1 { margin:0; display:grid; gap:2px; width:92px; background:transparent; }
+.brand-logo { display:block; width:100%; height:auto; background:transparent; }
+.brand-logo-bright, .bright .brand-logo-dark { display:none; }
+.bright .brand-logo-bright { display:block; }
 .brand-caption, .unit, small { font-size:12px; font-weight:600; color:var(--muted); letter-spacing:.13em; }
 .brand-caption { fill:currentColor; letter-spacing:normal; }
 .unit { text-align:right; padding-top:3px; }
