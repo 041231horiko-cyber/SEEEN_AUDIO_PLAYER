@@ -31,6 +31,7 @@
   var playToggle = document.getElementById("play-toggle");
   var nowPlaying = document.getElementById("now-playing");
   var playbackState = document.getElementById("playback-state");
+  var loopStatus = document.getElementById("loop-status");
   var offlineStatus = document.getElementById("offline-status");
   var errorMessage = document.getElementById("error-message");
   var instruction = document.getElementById("instruction");
@@ -48,6 +49,7 @@
     playbackState.dataset.state = state;
 
     var isPlaying = state === "playing" || state === "counting";
+    playbackState.parentElement.dataset.indicator = isPlaying ? "yes" : state === "loading" ? "pending" : "no";
     playToggle.textContent = isPlaying ? "PAUSE" : "PLAY";
     playToggle.setAttribute("aria-label", isPlaying ? "一時停止する" : "再生する");
     playToggle.dataset.playing = isPlaying ? "true" : "false";
@@ -117,6 +119,7 @@
     audio.src = useCue ? cueSource : track.src;
     audio.defaultPlaybackRate = useCue ? cueDurationSeconds * COUNT_IN_BPM / (2 * 60) : 1;
     audio.loop = !useCue;
+    syncLoopState();
     audio.load();
 
     try {
@@ -238,8 +241,15 @@
       controller: navigator.serviceWorker && navigator.serviceWorker.controller && navigator.serviceWorker.controller.scriptURL});
     offlineStatus.textContent = label;
     offlineStatus.dataset.state = state;
+    offlineStatus.parentElement.dataset.indicator = state === "ready" ? "yes" : state === "checking" ? "pending" : "no";
     offlineStatus.disabled = !retryable;
     offlineStatus.setAttribute("aria-label", retryable ? "オフライン保存を再試行" : "オフライン状態 " + label);
+  }
+
+  function syncLoopState() {
+    var enabled = audio.loop;
+    loopStatus.dataset.indicator = enabled ? "yes" : "no";
+    loopStatus.querySelector("span").textContent = enabled ? "LOOP" : "LOOP OFF";
   }
 
   function sendServiceWorkerMessage(type) {
@@ -432,5 +442,6 @@
     }
   });
 
+  syncLoopState();
   registerServiceWorker();
 }());

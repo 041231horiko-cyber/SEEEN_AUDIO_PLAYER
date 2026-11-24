@@ -62,9 +62,9 @@
         </section>
         <button id="play-toggle" type="button" aria-label="再生する">PLAY</button>
         <footer aria-label="再生ステータス">
-          <div><i aria-hidden="true"></i><output id="playback-state" data-state="idle">IDLE</output></div>
-          <div><i aria-hidden="true"></i><span>LOOP</span></div>
-          <div><i aria-hidden="true"></i><button id="offline-status" type="button" disabled>CHECKING</button></div>
+          <div data-indicator="no"><i aria-hidden="true"></i><output id="playback-state" data-state="idle">IDLE</output></div>
+          <div id="loop-status" data-indicator="yes"><i aria-hidden="true"></i><span>LOOP</span></div>
+          <div data-indicator="pending"><i aria-hidden="true"></i><button id="offline-status" type="button" disabled>CHECKING</button></div>
         </footer>
         <p id="error-message" role="alert" hidden></p>
       </section>
