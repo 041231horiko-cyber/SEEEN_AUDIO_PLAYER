@@ -11,6 +11,8 @@
   var WIDE_COUNT = 6500;
   var NARROW_COUNT = 9500;
   var STOP_MS = 420;
+  // Adopted Reset emission phase: 32% of 900 ms.
+  var EMISSION_MS = 288;
   var GOLDEN_ANGLE = 2.39996323;
   var CLIP_X = 12;
   var CLIP_Y = 75;
@@ -293,11 +295,67 @@
     this.canvas.dataset.motionState = this.motionState;
   };
 
+  ParticleField.prototype.emitFromPoint = function (options) {
+    var self = this;
+    var settings = options || {};
+    var duration = Number.isFinite(settings.duration) ? settings.duration : EMISSION_MS;
+    var startScale = Number.isFinite(settings.startScale) ? settings.startScale : 0;
+    var startedAt = now();
+
+    this.stop();
+    this.setMode(settings.mode || this.mode);
+    if (settings.theme) {
+      this.theme = settings.theme === "bright" ? "bright" : "dark";
+    }
+    this.time = 0;
+    this.scale = startScale;
+    this.running = true;
+    this.motionState = "emitting";
+    this.stats.loopStarts += 1;
+    this.canvas.dataset.running = "true";
+    this.canvas.dataset.motionState = this.motionState;
+    this.canvas.dataset.transitionDuration = String(duration);
+    this.canvas.dataset.loopStarts = String(this.stats.loopStarts);
+
+    function drawEmissionFrame(timestamp) {
+      var progress;
+      if (!self.running || self.motionState !== "emitting") return;
+      progress = clamp((timestamp - startedAt) / duration);
+      self.scale = startScale + (1 - startScale) * smooth(progress);
+      self.time = progress * duration * 0.001;
+      self.stats.loopFrames += 1;
+      self.canvas.dataset.loopFrames = String(self.stats.loopFrames);
+      self.render({
+        mode: self.mode,
+        theme: self.theme,
+        time: self.time,
+        scale: self.scale
+      });
+
+      if (progress >= 1) {
+        self.running = false;
+        self.frame = 0;
+        self.lastFrameAt = 0;
+        self.start({
+          mode: self.mode,
+          theme: self.theme,
+          time: self.time,
+          scale: 1
+        });
+        return;
+      }
+      self.frame = requestAnimationFrame(drawEmissionFrame);
+    }
+
+    this.frame = requestAnimationFrame(drawEmissionFrame);
+  };
+
   ParticleField.prototype.collapseToPoint = function (options) {
     var self = this;
     var settings = options || {};
     var duration = Number.isFinite(settings.duration) ? settings.duration : STOP_MS;
     var fixedTime = Number.isFinite(settings.time) ? settings.time : this.time;
+    var startScale = Number.isFinite(settings.scale) ? settings.scale : this.scale;
     var startedAt = now();
 
     this.stop();
@@ -306,7 +364,7 @@
       this.theme = settings.theme === "bright" ? "bright" : "dark";
     }
     this.time = fixedTime;
-    this.scale = 1;
+    this.scale = startScale;
     this.running = true;
     this.motionState = "collapsing";
     this.stats.loopStarts += 1;
@@ -319,7 +377,7 @@
       var progress;
       if (!self.running || self.motionState !== "collapsing") return;
       progress = clamp((timestamp - startedAt) / duration);
-      self.scale = 1 - smooth(progress);
+      self.scale = startScale * (1 - smooth(progress));
       self.stats.loopFrames += 1;
       self.canvas.dataset.loopFrames = String(self.stats.loopFrames);
       self.render({
@@ -361,7 +419,8 @@
       wideCount: WIDE_COUNT,
       narrowCount: NARROW_COUNT,
       goldenAngle: GOLDEN_ANGLE,
-      stopMs: STOP_MS
+      stopMs: STOP_MS,
+      emissionMs: EMISSION_MS
     },
     formulas: {
       makeWide: makeWide,
@@ -442,15 +501,27 @@
 
       if (playbackState === "playing") {
         if (previousPlaybackState === "paused" || renderer.motionState === "point" || renderer.motionState === "collapsing") {
-          renderer.stop();
-          renderer.time = 0;
-          renderer.scale = 1;
-          renderer.render({ mode: mode, theme: theme, time: 0, scale: 1 });
+          renderer.emitFromPoint({
+            mode: mode,
+            theme: theme,
+            duration: EMISSION_MS,
+            startScale: renderer.motionState === "point" ? 0 : renderer.scale
+          });
+        } else if (renderer.motionState === "emitting") {
+          if (!renderer.running) {
+            renderer.emitFromPoint({
+              mode: mode,
+              theme: theme,
+              duration: EMISSION_MS,
+              startScale: renderer.scale
+            });
+          }
+        } else {
+          renderer.start({ mode: mode, theme: theme, time: renderer.time, scale: 1 });
         }
-        renderer.start({ mode: mode, theme: theme, time: renderer.time, scale: 1 });
       } else if (playbackState === "paused" || playbackState === "idle") {
-        if (previousPlaybackState === "playing" || renderer.motionState === "playing") {
-          renderer.collapseToPoint({ mode: mode, theme: theme, time: renderer.time, duration: STOP_MS });
+        if (previousPlaybackState === "playing" || renderer.motionState === "playing" || renderer.motionState === "emitting") {
+          renderer.collapseToPoint({ mode: mode, theme: theme, time: renderer.time, scale: renderer.scale, duration: STOP_MS });
         } else if (renderer.motionState !== "collapsing" && renderer.motionState !== "point" && previousPlaybackState !== "counting") {
           renderer.showPoint({ mode: mode, theme: theme, time: renderer.time });
         }
