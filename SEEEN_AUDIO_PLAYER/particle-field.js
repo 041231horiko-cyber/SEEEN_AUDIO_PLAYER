@@ -10,6 +10,7 @@
   var CENTER_RADIUS = 3.4;
   var WIDE_COUNT = 6500;
   var NARROW_COUNT = 9500;
+  var STOP_MS = 420;
   var GOLDEN_ANGLE = 2.39996323;
   var CLIP_X = 12;
   var CLIP_Y = 75;
@@ -129,6 +130,7 @@
     this.time = 0;
     this.scale = 1;
     this.running = false;
+    this.motionState = "point";
     this.frame = 0;
     this.lastFrameAt = 0;
     this.stats = {
@@ -145,6 +147,7 @@
     this.canvas.dataset.narrowCount = String(this.narrow.length);
     this.canvas.dataset.initializationMs = this.stats.initializationMs.toFixed(3);
     this.canvas.dataset.running = "false";
+    this.canvas.dataset.motionState = this.motionState;
     this.canvas.dataset.loopStarts = "0";
     this.canvas.dataset.loopFrames = "0";
   }
@@ -221,6 +224,7 @@
     this.canvas.dataset.mode = this.mode;
     this.canvas.dataset.theme = this.theme;
     this.canvas.dataset.time = String(this.time);
+    this.canvas.dataset.scale = String(this.scale);
     this.canvas.dataset.devicePixelRatio = String(this.stats.devicePixelRatio);
     this.canvas.dataset.lastRenderMs = this.stats.lastRenderMs.toFixed(3);
     return this.stats.lastRenderMs;
@@ -239,8 +243,10 @@
     this.scale = Number.isFinite(settings.scale) ? settings.scale : this.scale;
     this.lastFrameAt = 0;
     this.running = true;
+    this.motionState = "playing";
     this.stats.loopStarts += 1;
     this.canvas.dataset.running = "true";
+    this.canvas.dataset.motionState = this.motionState;
     this.canvas.dataset.loopStarts = String(this.stats.loopStarts);
 
     function drawFrame(timestamp) {
@@ -273,6 +279,71 @@
     this.canvas.dataset.running = "false";
   };
 
+  ParticleField.prototype.showPoint = function (options) {
+    var settings = options || {};
+    this.stop();
+    this.time = Number.isFinite(settings.time) ? settings.time : this.time;
+    this.render({
+      mode: settings.mode || this.mode,
+      theme: settings.theme || this.theme,
+      time: this.time,
+      scale: 0
+    });
+    this.motionState = "point";
+    this.canvas.dataset.motionState = this.motionState;
+  };
+
+  ParticleField.prototype.collapseToPoint = function (options) {
+    var self = this;
+    var settings = options || {};
+    var duration = Number.isFinite(settings.duration) ? settings.duration : STOP_MS;
+    var fixedTime = Number.isFinite(settings.time) ? settings.time : this.time;
+    var startedAt = now();
+
+    this.stop();
+    this.setMode(settings.mode || this.mode);
+    if (settings.theme) {
+      this.theme = settings.theme === "bright" ? "bright" : "dark";
+    }
+    this.time = fixedTime;
+    this.scale = 1;
+    this.running = true;
+    this.motionState = "collapsing";
+    this.stats.loopStarts += 1;
+    this.canvas.dataset.running = "true";
+    this.canvas.dataset.motionState = this.motionState;
+    this.canvas.dataset.transitionDuration = String(duration);
+    this.canvas.dataset.loopStarts = String(this.stats.loopStarts);
+
+    function drawCollapseFrame(timestamp) {
+      var progress;
+      if (!self.running || self.motionState !== "collapsing") return;
+      progress = clamp((timestamp - startedAt) / duration);
+      self.scale = 1 - smooth(progress);
+      self.stats.loopFrames += 1;
+      self.canvas.dataset.loopFrames = String(self.stats.loopFrames);
+      self.render({
+        mode: self.mode,
+        theme: self.theme,
+        time: fixedTime,
+        scale: self.scale
+      });
+
+      if (progress >= 1) {
+        self.running = false;
+        self.frame = 0;
+        self.lastFrameAt = 0;
+        self.motionState = "point";
+        self.canvas.dataset.running = "false";
+        self.canvas.dataset.motionState = self.motionState;
+        return;
+      }
+      self.frame = requestAnimationFrame(drawCollapseFrame);
+    }
+
+    this.frame = requestAnimationFrame(drawCollapseFrame);
+  };
+
   var canvas = document.getElementById("particle-field");
   if (!canvas) return;
 
@@ -289,7 +360,8 @@
       centerRadius: CENTER_RADIUS,
       wideCount: WIDE_COUNT,
       narrowCount: NARROW_COUNT,
-      goldenAngle: GOLDEN_ANGLE
+      goldenAngle: GOLDEN_ANGLE,
+      stopMs: STOP_MS
     },
     formulas: {
       makeWide: makeWide,
@@ -323,6 +395,7 @@
     var state = document.getElementById("playback-state");
     var selector = document.querySelector(".selector");
     var activeTrack = "";
+    var previousPlaybackState = state.dataset.state;
 
     function syncParticleMotion() {
       var selected = document.querySelector('[data-track][aria-pressed="true"]');
@@ -330,31 +403,68 @@
       var mode = track.indexOf("narrow") >= 0 ? "narrow" : track.indexOf("wide") >= 0 ? "wide" : "";
       var theme = track.indexOf("bright") === 0 ? "bright" : "dark";
       var changed = track !== activeTrack;
+      var playbackState = state.dataset.state;
+      var hadTrack = Boolean(activeTrack);
 
       document.body.classList.toggle("particle-active", Boolean(mode));
 
       if (!mode) {
         renderer.stop();
         activeTrack = track;
+        previousPlaybackState = playbackState;
         return;
       }
 
       if (changed) {
         renderer.stop();
         renderer.time = 0;
-        renderer.scale = 1;
-        renderer.render({ mode: mode, theme: theme, time: 0, scale: 1 });
+        if (!hadTrack && playbackState !== "playing") {
+          renderer.showPoint({ mode: mode, theme: theme, time: 0 });
+        } else {
+          renderer.scale = 1;
+          renderer.render({ mode: mode, theme: theme, time: 0, scale: 1 });
+          renderer.motionState = "frozen";
+          renderer.canvas.dataset.motionState = renderer.motionState;
+        }
       } else if (renderer.theme !== theme) {
         renderer.render({ mode: mode, theme: theme, time: renderer.time, scale: 1 });
       }
       activeTrack = track;
 
-      if (document.hidden || state.dataset.state !== "playing") {
+      if (document.hidden) {
         renderer.stop();
+        if (playbackState === "paused" || playbackState === "idle") {
+          renderer.showPoint({ mode: mode, theme: theme, time: renderer.time });
+        }
+        previousPlaybackState = playbackState;
         return;
       }
 
-      renderer.start({ mode: mode, theme: theme, time: renderer.time, scale: 1 });
+      if (playbackState === "playing") {
+        if (previousPlaybackState === "paused" || renderer.motionState === "point" || renderer.motionState === "collapsing") {
+          renderer.stop();
+          renderer.time = 0;
+          renderer.scale = 1;
+          renderer.render({ mode: mode, theme: theme, time: 0, scale: 1 });
+        }
+        renderer.start({ mode: mode, theme: theme, time: renderer.time, scale: 1 });
+      } else if (playbackState === "paused" || playbackState === "idle") {
+        if (previousPlaybackState === "playing" || renderer.motionState === "playing") {
+          renderer.collapseToPoint({ mode: mode, theme: theme, time: renderer.time, duration: STOP_MS });
+        } else if (renderer.motionState !== "collapsing" && renderer.motionState !== "point" && previousPlaybackState !== "counting") {
+          renderer.showPoint({ mode: mode, theme: theme, time: renderer.time });
+        }
+      } else {
+        renderer.stop();
+        if (previousPlaybackState === "paused" || renderer.motionState === "collapsing" || renderer.motionState === "point") {
+          renderer.time = 0;
+          renderer.showPoint({ mode: mode, theme: theme, time: 0 });
+        } else if (renderer.motionState === "playing") {
+          renderer.motionState = "frozen";
+          renderer.canvas.dataset.motionState = renderer.motionState;
+        }
+      }
+      previousPlaybackState = playbackState;
     }
 
     var observer = new MutationObserver(syncParticleMotion);
@@ -364,7 +474,7 @@
     document.addEventListener("visibilitychange", syncParticleMotion);
     window.addEventListener("resize", function () {
       if (!document.body.classList.contains("particle-active")) return;
-      renderer.render({ mode: renderer.mode, theme: renderer.theme, time: renderer.time, scale: 1 });
+      renderer.render({ mode: renderer.mode, theme: renderer.theme, time: renderer.time, scale: renderer.scale });
     });
     syncParticleMotion();
   }
