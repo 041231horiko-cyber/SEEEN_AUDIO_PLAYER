@@ -91,6 +91,29 @@
     return palette;
   }
 
+  function createPaletteMixer(from, to) {
+    var mixer = { palette: {} };
+    PALETTE_KEYS.forEach(function (key) {
+      mixer[key] = {
+        from: colorChannels(from[key]),
+        to: colorChannels(to[key])
+      };
+    });
+    return mixer;
+  }
+
+  function mixPreparedPalette(mixer, amount) {
+    var inverse = 1 - amount;
+    PALETTE_KEYS.forEach(function (key) {
+      var channels = mixer[key];
+      mixer.palette[key] = "rgb(" +
+        Math.round(channels.from[0] * inverse + channels.to[0] * amount) + "," +
+        Math.round(channels.from[1] * inverse + channels.to[1] * amount) + "," +
+        Math.round(channels.from[2] * inverse + channels.to[2] * amount) + ")";
+    });
+    return mixer.palette;
+  }
+
   function g(x, s) {
     return Math.exp(-x * x / (s * s));
   }
@@ -112,10 +135,19 @@
         x: Math.cos(angle) * radius,
         y: Math.sin(angle) * radius,
         r: radius,
-        j: hash(i)
+        j: hash(i),
+        phase: radius * 13,
+        edge: 1 - 0.77 * radius * radius
       };
+      points[i].shade = 0.55 + 0.45 * points[i].j;
+      points[i].dot = 0.75 + 0.5 * points[i].j;
     }
     return points;
+  }
+
+  function wideAmplitudePrepared(point, timePhase) {
+    return (0.015 + 0.83 * Math.pow(0.5 + 0.5 * Math.cos(point.phase - timePhase), 7)) *
+      point.edge * point.shade;
   }
 
   function wideAmplitude(point, time) {
@@ -145,25 +177,38 @@
           Math.hypot(x + 2, y),
           Math.hypot(x, y - 2),
           Math.hypot(x, y + 2)
-        ]
+        ],
+        wall0: smooth(x / 0.2),
+        wall1: smooth(-x / 0.2),
+        wall2: smooth(y / 0.2),
+        wall3: smooth(-y / 0.2)
       };
+      points[i].gain = 0.65 + points[i].j * 0.35;
+      points[i].dot = 0.29 + 0.13 * points[i].j;
     }
     return points;
+  }
+
+  function narrowAmplitudePrepared(point, travel, blend, focus, fade) {
+    var direct = g(point.r - travel, 0.06) * 0.9;
+    var merged = Math.max(0, g(point.d[0] - travel, 0.07) * point.wall0 * 0.85);
+    merged = Math.max(merged, g(point.d[1] - travel, 0.07) * point.wall1 * 0.85);
+    merged = Math.max(merged, g(point.d[2] - travel, 0.07) * point.wall2 * 0.85);
+    merged = Math.max(merged, g(point.d[3] - travel, 0.07) * point.wall3 * 0.85);
+    var converge = g(point.r - focus, 0.075) * 0.78;
+    var combined = Math.max(direct, merged);
+    var value = (combined * (1 - blend) + converge * blend) * fade;
+    return (0.014 + 0.92 * Math.min(1, value)) * point.gain;
   }
 
   function narrowAmplitude(point, time) {
     var travel = (time * 0.66) % 3.1;
     var direct = g(point.r - travel, 0.06) * 0.9;
-    var merged = 0;
+    var merged = Math.max(0, g(point.d[0] - travel, 0.07) * smooth(point.x / 0.2) * 0.85);
+    merged = Math.max(merged, g(point.d[1] - travel, 0.07) * smooth(-point.x / 0.2) * 0.85);
+    merged = Math.max(merged, g(point.d[2] - travel, 0.07) * smooth(point.y / 0.2) * 0.85);
+    merged = Math.max(merged, g(point.d[3] - travel, 0.07) * smooth(-point.y / 0.2) * 0.85);
     var blend = smooth((travel - 1.32) / 0.55);
-    var i;
-
-    for (i = 0; i < 4; i += 1) {
-      var side = [point.x, -point.x, point.y, -point.y][i];
-      var physical = g(point.d[i] - travel, 0.07) * smooth(side / 0.2) * 0.85;
-      merged = Math.max(merged, physical);
-    }
-
     var focus = Math.max(0, 2 - travel);
     var converge = g(point.r - focus, 0.075) * 0.78;
     var combined = Math.max(direct, merged);
@@ -196,6 +241,7 @@
     this.running = false;
     this.motionState = "point";
     this.resetVisualTrack = "";
+    this.renderDpr = 0;
     this.frame = 0;
     this.lastFrameAt = 0;
     this.stats = {
@@ -222,11 +268,12 @@
     var width = Math.round(DESIGN_WIDTH * dpr);
     var height = Math.round(DESIGN_HEIGHT * dpr);
 
-    if (this.canvas.width !== width || this.canvas.height !== height) {
+    if (this.canvas.width !== width || this.canvas.height !== height || this.renderDpr !== dpr) {
       this.canvas.width = width;
       this.canvas.height = height;
+      this.context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.renderDpr = dpr;
     }
-    this.context.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.stats.devicePixelRatio = dpr;
   };
 
@@ -249,7 +296,23 @@
     var radius = narrow ? NARROW_HALF : WIDE_RADIUS;
     var points = narrow ? this.narrow : this.wide;
     var context = this.context;
+    var wideTimePhase;
+    var wideDotScale;
+    var narrowTravel;
+    var narrowBlend;
+    var narrowFocus;
+    var narrowFade;
     var i;
+
+    if (narrow) {
+      narrowTravel = (time * 0.66) % 3.1;
+      narrowBlend = smooth((narrowTravel - 1.32) / 0.55);
+      narrowFocus = Math.max(0, 2 - narrowTravel);
+      narrowFade = 1 - smooth((narrowTravel - 1.97) / 0.22);
+    } else {
+      wideTimePhase = time * 3.5;
+      wideDotScale = 0.29 * Math.max(0.7, radius / 90);
+    }
 
     this.setMode(mode);
     this.theme = theme === "bright" ? "bright" : "dark";
@@ -268,13 +331,15 @@
     if (scale > 0.001) {
       for (i = 0; i < points.length; i += 1) {
         var point = points[i];
-        var amplitude = narrow ? narrowAmplitude(point, time) : wideAmplitude(point, time);
+        var amplitude = narrow ? narrowAmplitudePrepared(
+          point, narrowTravel, narrowBlend, narrowFocus, narrowFade
+        ) : wideAmplitudePrepared(point, wideTimePhase);
         context.globalAlpha = clamp(amplitude * scale);
         context.beginPath();
         context.arc(
           CENTER_X + point.x * radius * scale,
           CENTER_Y + point.y * radius * scale,
-          narrow ? narrowDot(point) : wideDot(point, radius),
+          narrow ? point.dot : wideDotScale * point.dot,
           0,
           Math.PI * 2
         );
@@ -472,6 +537,7 @@
     var fromTrack = settings.fromTrack || this.resetVisualTrack;
     var toTrack = settings.toTrack || fromTrack;
     var themeChanges = Math.abs(fromLightBlend - toLightBlend) > 0.0001;
+    var paletteMixer = themeChanges ? createPaletteMixer(fromPalette, toPalette) : null;
     var startedAt = now();
     var timelineAt = startedAt;
     var timelineElapsed = 0;
@@ -522,7 +588,7 @@
       theme = phase.newState ? toTheme : fromTheme;
       scale = progress < 0.32 ? fromScale * (1 - smooth(progress / 0.32)) : phase.scale;
       renderTime = phase.emit ? (progress - 0.68) * duration * 0.001 : oldTime + elapsed * 0.001;
-      palette = themeChanges ? mixPalette(fromPalette, toPalette, phase.blend) : toPalette;
+      palette = themeChanges ? mixPreparedPalette(paletteMixer, phase.blend) : toPalette;
       lightBlend = fromLightBlend * (1 - phase.blend) + toLightBlend * phase.blend;
       playbackActive = !settings.isPlaybackActive || settings.isPlaybackActive();
       if (phase.emit && !playbackActive) scale = 0;
