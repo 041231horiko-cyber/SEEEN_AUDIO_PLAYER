@@ -106,8 +106,22 @@ body, header, .controls, .selector button, #play-toggle, .caption,
 }
 .selector button { background-color:var(--inactive); color:var(--primary); }
 .selector button[aria-pressed="true"] { background-color:var(--primary); color:var(--background); }
+.selector button, #play-toggle {
+  transform:scale(1);
+  transform-origin:center;
+  filter:brightness(1);
+  transition-property:background-color,color,border-color,transform,filter;
+  transition-duration:var(--theme-time),var(--theme-time),var(--theme-time),140ms,140ms;
+  transition-timing-function:ease-in-out,ease-in-out,ease-in-out,ease,ease;
+}
+.selector button:active, #play-toggle:active { transform:scale(.95); filter:brightness(1.18); }
 .resetting, .resetting * { transition:none!important; animation:none!important; }
 body.resetting::before { transition:none!important; }
+.resetting .selector button, .resetting #play-toggle {
+  transition-property:transform,filter!important;
+  transition-duration:140ms,140ms!important;
+  transition-timing-function:ease,ease!important;
+}
 .resetting .selector button { background-color:var(--inactive); color:var(--primary); }
 .resetting .selector button.reset-visual-selected { background-color:var(--primary); color:var(--background); }
 
