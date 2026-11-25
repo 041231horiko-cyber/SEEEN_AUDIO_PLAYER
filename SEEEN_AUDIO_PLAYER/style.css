@@ -106,6 +106,10 @@ body, header, .controls, .selector button, #play-toggle, .caption,
 }
 .selector button { background-color:var(--inactive); color:var(--primary); }
 .selector button[aria-pressed="true"] { background-color:var(--primary); color:var(--background); }
+.resetting, .resetting * { transition:none!important; animation:none!important; }
+body.resetting::before { transition:none!important; }
+.resetting .selector button { background-color:var(--inactive); color:var(--primary); }
+.resetting .selector button.reset-visual-selected { background-color:var(--primary); color:var(--background); }
 
 /* Keep glyph edges distinct while foreground and paper pass through grey. */
 @keyframes theme-legibility {
@@ -116,18 +120,18 @@ body, header, .controls, .selector button, #play-toggle, .caption,
 @media(prefers-reduced-motion:reduce){ .theme-changing main { animation:none; } }
 
 /* Keep iOS 15's animated background in one viewport-sized layer. */
-.ios15-theme body { background:#080808; }
+.ios15-theme body { --ios-bright-opacity:0; background:#080808; }
+.ios15-theme body.bright { --ios-bright-opacity:1; }
 .ios15-theme body::before {
   content:"";
   position:fixed;
   inset:0;
   background:#F2F2F0;
-  opacity:0;
+  opacity:var(--ios-bright-opacity);
   transition:opacity var(--theme-time) ease-in-out;
   pointer-events:none;
 }
 .ios15-theme #app-shell { background:transparent; }
-.ios15-theme body.bright::before { opacity:1; }
 .ios15-theme main { position:relative; }
 /* Expose the viewport fade instead of painting a second paper-colored tile. */
 .ios15-theme .caption {

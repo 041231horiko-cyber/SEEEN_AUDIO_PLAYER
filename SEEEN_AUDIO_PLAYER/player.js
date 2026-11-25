@@ -7,6 +7,7 @@
   var cueDurationSeconds = 0.75;
   var cueSource = "audio/ui-switch.wav";
   var cueOperation = 0;
+  var announcedCueOperation = 0;
 
   var TRACKS = {
     "bright-wide": {
@@ -397,6 +398,15 @@
   });
 
   audio.addEventListener("playing", function () {
+    if (cueOperation === operationId && audio.currentSrc === new URL(cueSource, document.baseURI).href) {
+      if (announcedCueOperation !== operationId) {
+        announcedCueOperation = operationId;
+        document.dispatchEvent(new CustomEvent("switchcueplaying", {
+          detail: { track: currentTrackKey, operation: operationId }
+        }));
+      }
+      return;
+    }
     if (isExpectedSource()) {
       setPlaybackState("playing", "PLAYING");
       clearError();

@@ -86,13 +86,6 @@
     var selected = document.querySelector('[data-track][aria-pressed="true"]');
     var next = selected ? selected.dataset.track : "";
     cancelAnimationFrame(frame);
-    var bright = next.indexOf("bright") === 0;
-    if (document.body.classList.contains("bright") !== bright) {
-      document.body.classList.remove("theme-changing");
-      void document.body.offsetWidth;
-      document.body.classList.add("theme-changing");
-      document.body.classList.toggle("bright", bright);
-    }
     if (next) {
       rings.style.opacity = 1;
       dot.style.opacity = 1;
