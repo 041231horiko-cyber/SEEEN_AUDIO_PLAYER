@@ -1,11 +1,14 @@
 "use strict";
 
 // 完成音源を同じファイル名で差し替えたら、この値を必ず更新する。
-var CACHE_VERSION = "seeen-audio-v39";
+var SCOPE = self.registration.scope;
+var CACHE_VERSION = "seeen-v04-step02-v1:" + SCOPE;
+var V03_SCOPE = "https://041231horiko-cyber.github.io/SEEEN_AUDIO_PLAYER/SEEEN_AUDIO_PLAYER/";
 var APP_ASSETS = [
   "./",
   "./index.html",
   "./style.css",
+  "./knock-sync.js",
   "./player.js",
   "./particle-field.js",
   "./field.js",
@@ -14,29 +17,51 @@ var APP_ASSETS = [
   "./icons/apple-touch-icon.png",
   "./icons/icon-180.png",
   "./icons/icon-192.png",
-  "./icons/icon-512.png"
+  "./icons/icon-512.png",
+  "./knock-data/bright-wide.json",
+  "./knock-data/bright-narrow.json",
+  "./knock-data/dark-wide.json",
+  "./knock-data/dark-narrow.json"
 ];
 var AUDIO_ASSETS = [
   "./audio/ui-switch.wav",
-  "./audio/bright_wide_loop.wav",
-  "./audio/bright_narrow_loop.wav",
-  "./audio/dark_wide_loop.wav",
-  "./audio/dark_narrow_loop.wav"
+  "./audio/bright_wide_loop_125s_test.m4a",
+  "./audio/bright_narrow_loop_125s_test.m4a",
+  "./audio/dark_wide_loop_125s_test.m4a",
+  "./audio/dark_narrow_loop_125s_test.m4a"
 ];
 var ALL_ASSETS = APP_ASSETS.concat(AUDIO_ASSETS);
+var ASSET_URLS = new Set(ALL_ASSETS.map(function (asset) { return new URL(asset, SCOPE).href; }));
+var AUDIO_URLS = new Set(AUDIO_ASSETS.map(function (asset) { return new URL(asset, SCOPE).href; }));
+
+function mediaResponse(response, url) {
+  var type = new URL(url, SCOPE).pathname.endsWith(".m4a") ? "audio/mp4" : "audio/wav";
+  if (response.headers.get("Content-Type") === type) return response;
+  var headers = new Headers(response.headers);
+  headers.set("Content-Type", type);
+  if (headers.has("Content-Encoding")) {
+    headers.delete("Content-Encoding");
+    headers.delete("Content-Length");
+  }
+  return new Response(response.body, {status: response.status, statusText: response.statusText, headers: headers});
+}
 
 async function cacheAsset(cache, asset) {
   var response = await fetch(asset, { cache: "reload" });
-  if (!response.ok) {
+  if (response.status !== 200) {
     throw new Error("Failed to cache " + asset + ": " + response.status);
   }
-  await cache.put(asset, response);
+  var url = new URL(asset, SCOPE).href;
+  await cache.put(url, AUDIO_URLS.has(url) ? mediaResponse(response, url) : response);
 }
 
 async function cacheAllAssets() {
   var cache = await caches.open(CACHE_VERSION);
   for (var index = 0; index < ALL_ASSETS.length; index += 1) {
-    await cacheAsset(cache, ALL_ASSETS[index]);
+    var asset = ALL_ASSETS[index];
+    var stored = await cache.match(new URL(asset, SCOPE).href);
+    // Retrying a partial install or a repair does not replace working entries.
+    if (!stored || stored.status !== 200) await cacheAsset(cache, asset);
   }
   return verifyOfflineCache();
 }
@@ -46,8 +71,8 @@ async function verifyOfflineCache() {
   var missing = [];
 
   for (var index = 0; index < ALL_ASSETS.length; index += 1) {
-    var response = await cache.match(ALL_ASSETS[index], { ignoreSearch: true });
-    if (!response || !response.ok) {
+    var response = await cache.match(new URL(ALL_ASSETS[index], SCOPE).href);
+    if (!response || response.status !== 200) {
       missing.push(ALL_ASSETS[index]);
     }
   }
@@ -61,12 +86,16 @@ async function verifyOfflineCache() {
 }
 
 self.addEventListener("install", function (event) {
+  if (SCOPE.startsWith(V03_SCOPE)) {
+    event.waitUntil(Promise.reject(new Error("V04 needs a separate origin or sibling scope")));
+    return;
+  }
   event.waitUntil(
     cacheAllAssets().then(function (result) {
       if (!result.ready) {
         throw new Error("Offline cache verification failed");
       }
-      return self.skipWaiting();
+      // Keep the old worker with its open pages until they close.
     })
   );
 });
@@ -91,16 +120,15 @@ async function getFullAudioResponse(request) {
   var cache = await caches.open(CACHE_VERSION);
   var cacheKey = fullAudioRequest(request);
   var cached = await cache.match(cacheKey, { ignoreSearch: true });
-  if (cached) {
+  if (cached && cached.status === 200) {
     return cached;
   }
 
   var response = await fetch(cacheKey);
-  if (!response.ok) {
+  if (response.status !== 200) {
     throw new Error("Audio fetch failed: " + response.status);
   }
-  await cache.put(cacheKey, response.clone());
-  return response;
+  return mediaResponse(response, cacheKey.url);
 }
 
 function rangeNotSatisfiable(size) {
@@ -112,11 +140,12 @@ function rangeNotSatisfiable(size) {
 }
 
 async function createRangeResponse(response, rangeHeader) {
-  var buffer = await response.arrayBuffer();
-  var size = buffer.byteLength;
+  // Keep the media as a Blob, not a full JS heap buffer plus a copied slice.
+  var blob = await response.blob();
+  var size = blob.size;
   var match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader || "");
 
-  if (!match) {
+  if (!match || (!match[1] && !match[2])) {
     return rangeNotSatisfiable(size);
   }
 
@@ -146,7 +175,7 @@ async function createRangeResponse(response, rangeHeader) {
   headers.set("Content-Length", String(end - start + 1));
   headers.delete("Content-Encoding");
 
-  return new Response(buffer.slice(start, end + 1), {
+  return new Response(blob.slice(start, end + 1), {
     status: 206,
     statusText: "Partial Content",
     headers: headers
@@ -158,7 +187,7 @@ async function handleAudioRequest(request) {
     var response = await getFullAudioResponse(request);
     var rangeHeader = request.headers.get("Range");
     if (rangeHeader) {
-      return createRangeResponse(response, rangeHeader);
+      return await createRangeResponse(response, rangeHeader);
     }
     return response;
   } catch (error) {
@@ -177,11 +206,7 @@ async function cacheFirst(request) {
     return cached;
   }
 
-  var response = await fetch(request);
-  if (response.ok && new URL(request.url).origin === self.location.origin) {
-    await currentCache.put(request, response.clone());
-  }
-  return response;
+  return fetch(request);
 }
 
 self.addEventListener("fetch", function (event) {
@@ -190,19 +215,18 @@ self.addEventListener("fetch", function (event) {
   }
 
   var url = new URL(event.request.url);
-  if (url.origin !== self.location.origin) {
-    return;
-  }
+  url.search = "";
+  url.hash = "";
 
-  if (url.pathname.indexOf("/audio/") !== -1) {
+  if (AUDIO_URLS.has(url.href)) {
     event.respondWith(handleAudioRequest(event.request));
     return;
   }
 
-  if (event.request.mode === "navigate") {
+  if (event.request.mode === "navigate" && (url.href === SCOPE || url.href === new URL("index.html", SCOPE).href)) {
     event.respondWith(
       caches.open(CACHE_VERSION).then(function (cache) {
-        return cache.match("./index.html");
+        return cache.match(new URL("index.html", SCOPE).href);
       }).then(function (cached) {
         return cached || fetch(event.request);
       })
@@ -210,7 +234,7 @@ self.addEventListener("fetch", function (event) {
     return;
   }
 
-  event.respondWith(cacheFirst(event.request));
+  if (ASSET_URLS.has(url.href)) event.respondWith(cacheFirst(event.request));
 });
 
 self.addEventListener("message", function (event) {

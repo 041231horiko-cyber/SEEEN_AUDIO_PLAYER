@@ -53,6 +53,7 @@
     }
   };
   var PALETTE_KEYS = ["background", "panel", "inactive", "primary", "muted", "yes", "no"];
+  var knock = window.SEEENKnockSync;
 
   function clamp(x) {
     return Math.max(0, Math.min(1, x));
@@ -164,6 +165,13 @@
       (1 - 0.77 * point.r * point.r) * (0.55 + 0.45 * point.j);
   }
 
+  function singleWideAmplitude(point, timePhase) {
+    var phase = point.phase - timePhase;
+    var pulse = Math.abs(phase) < Math.PI ?
+      0.83 * Math.pow(0.5 + 0.5 * Math.cos(phase), 7) : 0;
+    return (0.015 + pulse) * point.edge * point.shade;
+  }
+
   function wideDot(point, radius) {
     return 0.29 * Math.max(0.7, radius / 90) * (0.75 + 0.5 * point.j);
   }
@@ -201,15 +209,17 @@
     return points;
   }
 
-  function narrowAmplitudePrepared(point, travel, blend, focus, fade) {
+  function narrowAmplitudePrepared(point, travel, blend, focus, fade, reflectionGain, compression) {
     var direct = g(point.r - travel, 0.06) * 0.9;
-    var merged = Math.max(0, g(point.d[0] - travel, 0.07) * point.wall0 * 0.85);
-    merged = Math.max(merged, g(point.d[1] - travel, 0.07) * point.wall1 * 0.85);
-    merged = Math.max(merged, g(point.d[2] - travel, 0.07) * point.wall2 * 0.85);
-    merged = Math.max(merged, g(point.d[3] - travel, 0.07) * point.wall3 * 0.85);
+    var press = compression > 0 && point.cushion;
+    var merged = Math.max(0, g(point.d[0] - travel, press ? 0.07 * (1 - compression * press[0]) : 0.07) * point.wall0 * 0.85);
+    merged = Math.max(merged, g(point.d[1] - travel, press ? 0.07 * (1 - compression * press[1]) : 0.07) * point.wall1 * 0.85);
+    merged = Math.max(merged, g(point.d[2] - travel, press ? 0.07 * (1 - compression * press[2]) : 0.07) * point.wall2 * 0.85);
+    merged = Math.max(merged, g(point.d[3] - travel, press ? 0.07 * (1 - compression * press[3]) : 0.07) * point.wall3 * 0.85);
     var converge = g(point.r - focus, 0.075) * 0.78;
-    var combined = Math.max(direct, merged);
-    var value = (combined * (1 - blend) + converge * blend) * fade;
+    var gain = reflectionGain === undefined ? 1 : reflectionGain;
+    var combined = Math.max(direct, merged * gain);
+    var value = (combined * (1 - blend) + converge * gain * blend) * fade;
     return (0.014 + 0.92 * Math.min(1, value)) * point.gain;
   }
 
@@ -233,6 +243,61 @@
     return 0.29 + 0.13 * point.j;
   }
 
+  // Keep the fixed draw coordinates and sizes. Only distances used by the
+  // reflection formula are remapped to the approved boundary once.
+  function reflectionGeometry(points) {
+    var ratio = knock.narrow.boundaryPercent / 100;
+    return points.map(function (point) {
+      var x = point.x / ratio;
+      var y = point.y / ratio;
+      var outside = Math.max(Math.abs(x), Math.abs(y));
+      return {
+        r: Math.hypot(x, y),
+        d: [Math.hypot(x - 2, y), Math.hypot(x + 2, y), Math.hypot(x, y - 2), Math.hypot(x, y + 2)],
+        wall0: smooth(x / 0.2),
+        wall1: smooth(-x / 0.2),
+        wall2: smooth(y / 0.2),
+        wall3: smooth(-y / 0.2),
+        cushion: outside <= 1 ? [
+          smooth((x - 0.82) / 0.18), smooth((-x - 0.82) / 0.18),
+          smooth((y - 0.82) / 0.18), smooth((-y - 0.82) / 0.18)
+        ] : null,
+        boundaryMask: 1 - smooth((outside - 1) / 0.08),
+        gain: point.gain
+      };
+    });
+  }
+
+  function prepareWave(age, mode) {
+    if (mode === "wide") return age * 3.5;
+    var travel = knock.narrowTravel(age);
+    return [
+      travel, smooth((travel - 1.32) / 0.55), Math.max(0, 2 - travel),
+      1 - smooth((travel - 1.97) / 0.22),
+      1 - (knock.narrow.decayPercent / 100) * smooth((travel - 1) / 1.19),
+      knock.cushionCompression(age)
+    ];
+  }
+
+  function synchronizedAmplitude(point, sampled, waves) {
+    var amplitude = 0;
+    var floor = sampled ? 0.014 * point.gain : 0;
+    for (var i = 0; i < waves.length; i += 1) {
+      var wave = waves[i];
+      var level;
+      if (!sampled) {
+        level = singleWideAmplitude(point, wave);
+      } else if (sampled.boundaryMask === 0) {
+        level = floor * wave[3];
+      } else {
+        level = narrowAmplitudePrepared(sampled, wave[0], wave[1], wave[2], wave[3], wave[4], wave[5]);
+        level = floor * wave[3] + (level - floor) * sampled.boundaryMask;
+      }
+      amplitude = Math.max(amplitude, level);
+    }
+    return amplitude;
+  }
+
   function now() {
     return window.performance && window.performance.now ? window.performance.now() : Date.now();
   }
@@ -243,6 +308,8 @@
     this.context = canvas.getContext("2d");
     this.wide = makeWide(WIDE_COUNT);
     this.narrow = makeNarrow(NARROW_COUNT);
+    this.reflection = reflectionGeometry(this.narrow);
+    this.lastRender = null;
     this.mode = "wide";
     this.theme = "dark";
     this.palette = PALETTES.dark;
@@ -315,6 +382,9 @@
     var narrowFocus;
     var narrowFade;
     var coveredScale;
+    var waveAges = settings.waveAges;
+    var waves = waveAges && waveAges.map(function (age) { return prepareWave(age, mode); });
+    var fieldOpacity = settings.fieldOpacity === undefined ? 1 : settings.fieldOpacity;
     var i;
 
     if (narrow) {
@@ -332,6 +402,8 @@
     this.color = color || COLORS[this.theme];
     this.time = time;
     this.scale = scale;
+    this.lastRender = {mode: mode, theme: theme, color: this.color, time: time, scale: scale,
+      waveAges: waveAges, fieldOpacity: fieldOpacity};
     this.resize();
 
     context.clearRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
@@ -342,14 +414,14 @@
     context.fillStyle = this.color;
 
     coveredScale = narrow ? NARROW_FIELD_COVERED_SCALE : PARTICLE_COVERED_SCALE;
-    if (scale > coveredScale) {
+    if (scale > coveredScale && fieldOpacity > 0 && (!waves || waves.length)) {
       for (i = 0; i < points.length; i += 1) {
         var point = points[i];
         if (narrow && scale <= point.coveredUntilScale) continue;
-        var amplitude = narrow ? narrowAmplitudePrepared(
+        var amplitude = waves ? synchronizedAmplitude(point, narrow ? this.reflection[i] : null, waves) : narrow ? narrowAmplitudePrepared(
           point, narrowTravel, narrowBlend, narrowFocus, narrowFade
         ) : wideAmplitudePrepared(point, wideTimePhase);
-        context.globalAlpha = clamp(amplitude * scale);
+        context.globalAlpha = clamp(amplitude * scale * fieldOpacity);
         context.beginPath();
         context.arc(
           CENTER_X + point.x * radius * scale,
@@ -388,7 +460,6 @@
     }
     this.time = Number.isFinite(settings.time) ? settings.time : this.time;
     this.scale = Number.isFinite(settings.scale) ? settings.scale : this.scale;
-    this.lastFrameAt = Number.isFinite(settings.lastFrameAt) ? settings.lastFrameAt : 0;
     this.running = true;
     this.motionState = "playing";
     this.stats.loopStarts += 1;
@@ -396,21 +467,18 @@
     this.canvas.dataset.motionState = this.motionState;
     this.canvas.dataset.loopStarts = String(this.stats.loopStarts);
 
-    function drawFrame(timestamp) {
-      var delta;
+    var media = document.getElementById("audio-player");
+    function drawFrame() {
       if (!self.running) return;
-      if (!self.lastFrameAt) self.lastFrameAt = timestamp;
-      delta = Math.min(Math.max(timestamp - self.lastFrameAt, 0), 50) * 0.001;
-      self.lastFrameAt = timestamp;
-      self.time += delta;
-      self.stats.loopFrames += 1;
-      self.canvas.dataset.loopFrames = String(self.stats.loopFrames);
-      self.render({
-        mode: self.mode,
-        theme: self.theme,
-        time: self.time,
-        scale: self.scale
-      });
+      var ages = knock.clock.sample(media);
+      // Hold through a media stall or while waiting for the selected source.
+      // Empty frames are drawn once, then only the inexpensive clock is polled.
+      if (ages !== null && (!self.lastRender || self.lastRender.waveAges !== ages ||
+          self.lastRender.scale !== 1 || self.lastRender.fieldOpacity !== 1)) {
+        self.stats.loopFrames += 1;
+        self.canvas.dataset.loopFrames = String(self.stats.loopFrames);
+        self.render({mode: self.mode, theme: self.theme, time: media.currentTime, scale: 1, waveAges: ages});
+      }
       self.frame = requestAnimationFrame(drawFrame);
     }
 
@@ -514,7 +582,9 @@
         mode: self.mode,
         theme: self.theme,
         time: self.time,
-        scale: self.scale
+        scale: self.scale,
+        // The operation flare returns to the point before the real knock stream.
+        fieldOpacity: 1 - smooth((progress - .68) / .32)
       });
 
       if (progress >= 1) {
@@ -550,6 +620,7 @@
     var toLightBlend = toTheme === "bright" ? 1 : 0;
     var fromScale = Number.isFinite(settings.scale) ? settings.scale : this.scale;
     var oldTime = Number.isFinite(settings.time) ? settings.time : this.time;
+    var outgoing = this.lastRender;
     var fromTrack = settings.fromTrack || this.resetVisualTrack;
     var toTrack = settings.toTrack || fromTrack;
     var themeChanges = Math.abs(fromLightBlend - toLightBlend) > 0.0001;
@@ -618,7 +689,10 @@
         theme: theme,
         color: palette.primary,
         time: renderTime,
-        scale: scale
+        scale: scale,
+        waveAges: progress < .32 && outgoing ? outgoing.waveAges : undefined,
+        fieldOpacity: phase.emit ? 1 - smooth((progress - .90) / .10) :
+          progress < .32 && outgoing ? outgoing.fieldOpacity : 1
       });
 
       if (progress >= 1) {
@@ -657,6 +731,7 @@
     var duration = Number.isFinite(settings.duration) ? settings.duration : STOP_MS;
     var fixedTime = Number.isFinite(settings.time) ? settings.time : this.time;
     var startScale = Number.isFinite(settings.scale) ? settings.scale : this.scale;
+    var outgoing = this.lastRender;
     var startedAt = now();
 
     this.stop();
@@ -685,7 +760,9 @@
         mode: self.mode,
         theme: self.theme,
         time: fixedTime,
-        scale: self.scale
+        scale: self.scale,
+        waveAges: outgoing && outgoing.waveAges,
+        fieldOpacity: outgoing ? outgoing.fieldOpacity : 1
       });
 
       if (progress >= 1) {
@@ -930,6 +1007,13 @@
           renderer.showPoint({ mode: mode, theme: theme, time: renderer.time });
         }
       } else {
+        if (playbackState === "loading" && renderer.running &&
+            (renderer.motionState === "emitting" || renderer.motionState === "playing")) {
+          // A waiting/stalled event must not stop the operation flare.
+          // If a real wave is active the media clock itself stays still.
+          previousPlaybackState = playbackState;
+          return;
+        }
         renderer.stop();
         if (previousPlaybackState === "paused" || renderer.motionState === "collapsing" || renderer.motionState === "point") {
           renderer.time = 0;
@@ -953,7 +1037,7 @@
     document.addEventListener("visibilitychange", syncParticleMotion);
     window.addEventListener("resize", function () {
       if (!document.body.classList.contains("particle-active")) return;
-      renderer.render({ mode: renderer.mode, theme: renderer.theme, color: renderer.color, time: renderer.time, scale: renderer.scale });
+      if (renderer.lastRender) renderer.render(renderer.lastRender);
     });
     syncParticleMotion();
   }

@@ -8,27 +8,33 @@
   var cueSource = "audio/ui-switch.wav";
   var cueOperation = 0;
   var announcedCueOperation = 0;
+  var V03_SCOPE = "https://041231horiko-cyber.github.io/SEEEN_AUDIO_PLAYER/SEEEN_AUDIO_PLAYER/";
+  var OFFLINE_CACHE_PREFIX = "seeen-v04-step02-v1:";
 
   var TRACKS = {
     "bright-wide": {
       label: "BRIGHT / WIDE",
-      src: "audio/bright_wide_loop.wav"
+      src: "audio/bright_wide_loop_125s_test.m4a"
     },
     "bright-narrow": {
       label: "BRIGHT / NARROW",
-      src: "audio/bright_narrow_loop.wav"
+      src: "audio/bright_narrow_loop_125s_test.m4a"
     },
     "dark-wide": {
       label: "DARK / WIDE",
-      src: "audio/dark_wide_loop.wav"
+      src: "audio/dark_wide_loop_125s_test.m4a"
     },
     "dark-narrow": {
       label: "DARK / NARROW",
-      src: "audio/dark_narrow_loop.wav"
+      src: "audio/dark_narrow_loop_125s_test.m4a"
     }
   };
 
   var audio = document.getElementById("audio-player");
+  var knockClock = window.SEEENKnockSync.createClock(function (url, options) {
+    return fetch(url, options);
+  }, document.baseURI);
+  window.SEEENKnockSync.clock = knockClock;
   var playToggle = document.getElementById("play-toggle");
   var nowPlaying = document.getElementById("now-playing");
   var playbackState = document.getElementById("playback-state");
@@ -108,6 +114,7 @@
     var useCue = SWITCH_CLICK_ENABLED && !skipCue && currentTrackKey && currentTrackKey !== key;
     cueOperation = useCue ? thisOperation : 0;
     switchingOperation = thisOperation;
+    if (!skipCue) knockClock.select(key, track.src);
     clearError();
     setSelectedTrack(key);
     setPlaybackState(useCue ? "counting" : "loading", useCue ? "COUNT IN" : "LOADING");
@@ -259,7 +266,7 @@
         return;
       }
 
-      var worker = navigator.serviceWorker.controller || serviceWorkerRegistration.active || serviceWorkerRegistration.waiting || serviceWorkerRegistration.installing;
+      var worker = serviceWorkerRegistration.active;
       if (!worker) {
         reject(new Error("Service Worker is not active"));
         return;
@@ -280,11 +287,16 @@
     });
   }
 
+  function offlineReady(result) {
+    return result && result.ready && result.switchCueCached === true &&
+      result.cacheName === OFFLINE_CACHE_PREFIX + serviceWorkerRegistration.scope;
+  }
+
   async function checkOfflineStatus() {
     setOfflineState("checking", "CHECKING", false);
     try {
       var result = await sendServiceWorkerMessage("CHECK_OFFLINE_STATUS");
-      if (result && result.ready && result.switchCueCached === true) {
+      if (offlineReady(result)) {
         setOfflineState("ready", "READY", false);
         return true;
       }
@@ -306,7 +318,7 @@
 
     try {
       var result = await sendServiceWorkerMessage("CACHE_ALL_ASSETS");
-      if (!result || !result.ready || !result.switchCueCached) {
+      if (!offlineReady(result)) {
         throw new Error("Cache incomplete");
       }
       setOfflineState("ready", "READY", false);
@@ -318,6 +330,11 @@
   }
 
   async function registerServiceWorker() {
+    if (location.href.startsWith(V03_SCOPE)) {
+      setOfflineState("error", "UNAVAILABLE", false);
+      showError("V04のオフライン検証には、V03とは別のHTTPS URLを使用してください。");
+      return;
+    }
     if (!window.isSecureContext || location.protocol === "file:" || !("serviceWorker" in navigator)) {
       setOfflineState("error", "UNAVAILABLE", false);
       showError("このブラウザではオフライン機能を利用できません。HTTPS または localhost で開いてください。");
