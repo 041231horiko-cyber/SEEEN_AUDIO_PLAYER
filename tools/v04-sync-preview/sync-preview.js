@@ -32,6 +32,30 @@
   let renderTotal = 0;
   let samples = 0;
   let renderedSamples = 0;
+  const narrowSettings = {...timeline.narrowDefaults};
+  const narrowLimits = {diffusionMs: [100, 3000], returnMs: [200, 6000],
+    boundaryPercent: [35, 100], decayPercent: [0, 100]};
+  let narrowProfile = narrowSettings;
+
+  function updateReflectionTiming() {
+    if (mode !== "narrow") return;
+    const wall = narrowProfile ? narrowProfile.diffusionMs : 1000 / .66;
+    const end = narrowProfile ? wall + narrowProfile.returnMs : timeline.lifetimes.narrow * 1000;
+    let text = "壁到達の目安 +" + Math.round(wall) + " ms · 波の終了 +" + Math.round(end) + " ms";
+    if (source && selected >= 0) {
+      const hit = source.knockEvents[selected];
+      const visualWall = adjusted.get(selected) + wall / 1000;
+      text += "。候補 " + (selected + 1) + " の壁到達 " + three(visualWall) + " 秒";
+      if (hit.echoes.length) {
+        const deltas = hit.echoes.map(echo => {
+          const diff = Math.round((visualWall - echo.time) * 1000);
+          return (diff > 0 ? "+" : "") + diff + " ms";
+        });
+        text += "（反響候補との差 " + deltas.join(" / ") + "）";
+      } else text += "（反響候補なし）";
+    }
+    byId("reflection-timing").textContent = text;
+  }
 
   function enabled(value) {
     for (const name of names) byId(name).disabled = !value;
@@ -97,6 +121,7 @@
     byId("verdict").value = review.verdicts.get(selected) || "";
     byId("previous").disabled = selected === 0;
     byId("next").disabled = selected === rows.length - 1;
+    updateReflectionTiming();
   }
 
   function timeButton(text, action) {
@@ -164,6 +189,8 @@
     [theme, mode] = trackId.split("-");
     byId("screen").dataset.theme = theme;
     releaseSource();
+    byId("narrow-controls").hidden = mode !== "narrow";
+    updateReflectionTiming();
     byId("status").textContent = "音源と解析データをSHA-256で照合中";
     try {
       if (!window.crypto || !window.crypto.subtle) throw new Error("ZIPを展開し、READMEのlocalhost手順で開いてください。");
@@ -204,12 +231,13 @@
     if (!force && snapshot === t) return;
     snapshot = t;
     const started = performance.now();
-    const waves = source ? timeline.activeWaves(events, t, mode) : [];
+    const waves = source ? timeline.activeWaves(events, t, mode, narrowProfile) : [];
     lookupTotal += performance.now() - started;
     samples++;
     if (force || waves.length || activeRows.length) {
       renderTotal += renderer.render({mode, theme, scale: waves.length ? 1 : 0,
-        time: waves.length ? waves[0].age : 0, waveAges: waves.map(wave => wave.age)});
+        time: waves.length ? waves[0].age : 0, waveAges: waves.map(wave => wave.age),
+        narrowProfile});
       renderedSamples++;
     }
     canvas.dataset.eventIds = waves.map(wave => wave.id + 1).join(",");
@@ -242,6 +270,22 @@
     }
   };
   byId("loop").onchange = event => { audio.loop = event.target.checked; };
+  byId("narrow-mode").onchange = event => {
+    narrowProfile = event.target.value === "legacy" ? null : narrowSettings;
+    for (const key of Object.keys(narrowLimits)) byId(key).disabled = !narrowProfile;
+    updateReflectionTiming();
+    draw(true);
+  };
+  for (const [key, [min, max]] of Object.entries(narrowLimits)) {
+    byId(key).value = narrowSettings[key];
+    byId(key).onchange = event => {
+      const parsed = event.target.value === "" ? narrowSettings[key] : Number(event.target.value);
+      if (Number.isFinite(parsed)) narrowSettings[key] = Math.min(max, Math.max(min, Math.round(parsed)));
+      event.target.value = narrowSettings[key];
+      updateReflectionTiming();
+      draw(true);
+    };
+  }
   seek.oninput = () => jump(Number(seek.value));
   byId("previous").onclick = () => {
     const id = selected < 0 ? timeline.upperBound(events, audio.currentTime) - 1 : selected - 1;
@@ -282,7 +326,9 @@
       missingTimes: item.missing, notes: item.notes
     }));
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([JSON.stringify({schemaVersion: 1, results}, null, 2)],
+    link.href = URL.createObjectURL(new Blob([JSON.stringify({
+      schemaVersion: 1, results, narrowPreview: {mode: narrowProfile ? "asymmetric" : "legacy", ...narrowSettings}
+    }, null, 2)],
       {type: "application/json"}));
     link.download = "SEEEN_V04_sync_review.json";
     link.click();

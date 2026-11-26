@@ -43,24 +43,63 @@ def preview_renderer():
   }
 
   function wideAmplitude(point, time) {''')
+    source = replace_once(source,
+        'function narrowAmplitudePrepared(point, travel, blend, focus, fade) {',
+        '''function narrowAmplitudePrepared(point, travel, blend, focus, fade, reflectionGain) {''')
+    source = replace_once(source, '''    var combined = Math.max(direct, merged);
+    var value = (combined * (1 - blend) + converge * blend) * fade;''',
+        '''    var gain = reflectionGain === undefined ? 1 : reflectionGain;
+    var combined = Math.max(direct, merged * gain);
+    var value = (combined * (1 - blend) + converge * gain * blend) * fade;''')
+    source = replace_once(source, '  ParticleField.prototype.render = function (options) {', '''  // Rebuild reflection distances only when the boundary changes. The original
+  // points still supply every draw coordinate, radius and occlusion check.
+  ParticleField.prototype.previewBoundary = function (ratio) {
+    if (this.previewBoundaryRatio === ratio) return this.previewBoundaryPoints;
+    this.previewBoundaryRatio = ratio;
+    this.previewBoundaryPoints = this.narrow.map(function (point) {
+      var x = point.x / ratio;
+      var y = point.y / ratio;
+      return {
+        r: Math.hypot(x, y),
+        d: [Math.hypot(x - 2, y), Math.hypot(x + 2, y), Math.hypot(x, y - 2), Math.hypot(x, y + 2)],
+        wall0: smooth(x / 0.2),
+        wall1: smooth(-x / 0.2),
+        wall2: smooth(y / 0.2),
+        wall3: smooth(-y / 0.2),
+        boundaryMask: 1 - smooth((Math.max(Math.abs(x), Math.abs(y)) - 1) / 0.08),
+        gain: point.gain
+      };
+    });
+    return this.previewBoundaryPoints;
+  };
+
+  ParticleField.prototype.render = function (options) {''')
     source = replace_once(source, '    var coveredScale;\n    var i;', '''    var coveredScale;
+    var profile = narrow && settings.narrowProfile;
+    var boundary = profile ? this.previewBoundary(profile.boundaryPercent / 100) : null;
     var waves = (settings.waveAges || [time]).map(function (age) {
       if (!narrow) return age * 3.5;
-      var travel = age * 0.66;
+      var travel = profile ? window.SEEENSyncTimeline.narrowTravel(age, profile) : age * 0.66;
+      var fade = 1 - smooth((travel - 1.97) / 0.22);
       return [
         travel, smooth((travel - 1.32) / 0.55), Math.max(0, 2 - travel),
-        1 - smooth((travel - 1.97) / 0.22)
+        fade, profile ? 1 - (profile.decayPercent / 100) * smooth((travel - 1) / 1.19) : 1
       ];
     });
     var i;''')
     source = replace_once(source, '''        var amplitude = narrow ? narrowAmplitudePrepared(
           point, narrowTravel, narrowBlend, narrowFocus, narrowFade
         ) : wideAmplitudePrepared(point, wideTimePhase);''', '''        var amplitude = 0;
+        var sampled = boundary ? boundary[i] : point;
         for (var waveIndex = 0; waveIndex < waves.length; waveIndex += 1) {
           var wave = waves[waveIndex];
           var level = narrow ? narrowAmplitudePrepared(
-            point, wave[0], wave[1], wave[2], wave[3]
+            sampled, wave[0], wave[1], wave[2], wave[3], wave[4]
           ) : singleWideAmplitude(point, wave);
+          if (boundary) {
+            var floor = 0.014 * point.gain;
+            level = floor * wave[3] + (level - floor) * sampled.boundaryMask;
+          }
           amplitude = Math.max(amplitude, level);
         }''')
     source = replace_once(source, '''    var wideTimePhase;

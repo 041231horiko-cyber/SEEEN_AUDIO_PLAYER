@@ -42,10 +42,11 @@ get("track").value = "bright-wide";
 get("loop").checked = true;
 
 let arcs = 0;
+let drawn = [];
 const canvas = get("particle-field");
 canvas.getContext = () => ({
-  setTransform(){}, clearRect(){ arcs = 0; }, save(){}, beginPath(){}, rect(){}, clip(){},
-  arc(){ arcs++; }, fill(){}, restore(){}
+  setTransform(){}, clearRect(){ arcs = 0; drawn = []; }, save(){}, beginPath(){}, rect(){}, clip(){},
+  arc(x, y, radius) { arcs++; drawn.push([x, y, radius, this.globalAlpha]); }, fill(){}, restore(){}
 });
 let frameId = 0;
 const pending = new Map();
@@ -79,6 +80,51 @@ function seek(time) {
 }
 function closeTo(actual, expected) {
   assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
+}
+
+function setControl(id, value) {
+  get(id).value = value;
+  get(id).onchange({target: get(id)});
+}
+
+function checkNarrow(renderer, track, hit, visible) {
+  assert.match(get("reflection-timing").textContent, /\+500 ms.*\+1700 ms/);
+  assert.match(get("reflection-timing").textContent, /反響候補との差/);
+  seek(hit.time + .5 - 1e-6);
+  const before = drawn;
+  seek(hit.time + .5 + 1e-6);
+  for (const [id, dot] of before.entries()) {
+    assert.deepEqual(drawn[id].slice(0, 3), dot.slice(0, 3));
+    assert.ok(Math.abs(drawn[id][3] - dot[3]) < .001);
+  }
+  const boundary = renderer.previewBoundaryPoints;
+  setControl("boundaryPercent", 70);
+  assert.notEqual(renderer.previewBoundaryPoints, boundary);
+  const shifted = renderer.previewBoundaryPoints;
+  setControl("decayPercent", 100);
+  assert.equal(renderer.previewBoundaryPoints, shifted);
+  seek(hit.time + 1.25);
+  const quieter = drawn;
+  setControl("decayPercent", 0);
+  assert.ok(drawn.some((dot, id) => dot[3] > quieter[id][3] + .01));
+  seek(hit.time + 1.699);
+  assert.ok(drawn.slice(0, -1).every(dot => dot[3] < .001));
+  seek(hit.time + 1.75);
+  assert.equal(canvas.dataset.eventIds, "");
+  assert.equal(arcs, 1);
+  setControl("returnMs", 5000);
+  seek(track.knockEvents[1].time + .1);
+  assert.equal(canvas.dataset.eventIds, "2,1");
+  assert.equal(arcs, visible + 1, "overlapping waves share a single particle draw");
+  setControl("narrow-mode", "legacy");
+  assert.match(get("reflection-timing").textContent, /\+1515 ms.*\+3318 ms/);
+  assert.ok(get("returnMs").disabled);
+  seek(hit.time + 1.75);
+  assert.equal(canvas.dataset.eventIds, "1");
+  setControl("narrow-mode", "asymmetric");
+  setControl("returnMs", 1200);
+  setControl("boundaryPercent", 75);
+  setControl("decayPercent", 65);
 }
 
 async function verify() {
@@ -118,9 +164,11 @@ async function verify() {
     assert.equal(canvas.dataset.eventIds, "");
     seek(hit.echoes[0]?.time ?? hit.time + .6);
     assert.equal(canvas.dataset.eventIds, "1");
+    assert.equal(get("narrow-controls").hidden, !narrow);
+    if (narrow) checkNarrow(renderer, track, hit, visible);
     await get("play").onclick();
     frameAt(124.69);
-    assert.equal(canvas.dataset.eventIds, "35");
+    assert.equal(canvas.dataset.eventIds, narrow ? "" : "35");
     frameAt(.005);
     assert.equal(canvas.dataset.eventIds, "");
     frameAt(hit.time + .04);

@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const {test} = require("node:test");
-const {activeWaves, adjustedEvents, lifetimes} = require("./timeline");
+const {activeWaves, adjustedEvents, lifetimes, narrowDefaults, narrowTravel} = require("./timeline");
 
 // Synthetic unit fixtures only. The package uses all 35 original timestamps.
 const events = adjustedEvents([
@@ -41,4 +41,41 @@ test("global and individual offsets are sorted by adjusted time", () => {
   assert.deepEqual(adjustedEvents(original, -50, new Map([[0, 300]])),
     [{id: 1, time: 1.25}, {id: 0, time: 1.45}]);
   assert.equal(original[0].time, 1.2);
+});
+
+test("asymmetric travel hits the wall and endpoint at the specified independent times", () => {
+  assert.equal(narrowTravel(0, narrowDefaults), 0);
+  assert.equal(narrowTravel(.5, narrowDefaults), 1);
+  assert.equal(narrowTravel(1.7, narrowDefaults), 2.19);
+  assert.equal(narrowTravel(.5), .33);
+  const slowerReturn = {...narrowDefaults, returnMs: 2000};
+  assert.equal(narrowTravel(.5, slowerReturn), 1);
+  assert.ok(narrowTravel(1.7, slowerReturn) < 2.19);
+});
+
+test("travel stays strictly forward with continuous, positive wall velocity across slider extremes", () => {
+  for (const diffusionMs of [100, 500, 3000]) {
+    for (const returnMs of [200, 1200, 6000]) {
+      const profile = {...narrowDefaults, diffusionMs, returnMs};
+      const wall = diffusionMs / 1000;
+      const duration = (diffusionMs + returnMs) / 1000;
+      const eps = 1e-7;
+      const before = (1 - narrowTravel(wall - eps, profile)) / eps;
+      const after = (narrowTravel(wall + eps, profile) - 1) / eps;
+      assert.ok(before > 0 && Math.abs(before - after) / before < 1e-4);
+      let previous = 0;
+      for (let i = 1; i <= 1000; i++) {
+        const position = narrowTravel(duration * (i / 1000), profile);
+        assert.ok(position > previous);
+        previous = position;
+      }
+    }
+  }
+});
+
+test("longer NARROW settings keep both direct waves active on the same clock", () => {
+  const profile = {...narrowDefaults, returnMs: 5000};
+  assert.deepEqual(activeWaves(events, 4.55, "narrow", profile).map(wave => wave.id), [1, 0]);
+  assert.deepEqual(activeWaves(events, 4.55, "narrow").map(wave => wave.id), [1]);
+  assert.deepEqual(activeWaves(events, 4.55, "wide", profile), activeWaves(events, 4.55, "wide"));
 });
