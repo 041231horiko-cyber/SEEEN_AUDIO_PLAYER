@@ -1,7 +1,7 @@
 "use strict";
 
 // 完成音源を同じファイル名で差し替えたら、この値を必ず更新する。
-var CACHE_VERSION = "seeen-audio-v36";
+var CACHE_VERSION = "seeen-audio-v37";
 var APP_ASSETS = [
   "./",
   "./index.html",

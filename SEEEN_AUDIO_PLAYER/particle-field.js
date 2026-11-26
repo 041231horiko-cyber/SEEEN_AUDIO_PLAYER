@@ -19,6 +19,9 @@
   var CLIP_Y = 75;
   var CLIP_WIDTH = 376;
   var CLIP_HEIGHT = 287;
+  // Below this scale every particle is hidden beneath the opaque center point,
+  // including a one-pixel antialiasing margin. Skip invisible overdraw.
+  var PARTICLE_COVERED_SCALE = 0.012;
   var COLORS = {
     dark: "#EEEEEC",
     bright: "#101010"
@@ -328,7 +331,7 @@
     context.clip();
     context.fillStyle = this.color;
 
-    if (scale > 0.001) {
+    if (scale > PARTICLE_COVERED_SCALE) {
       for (i = 0; i < points.length; i += 1) {
         var point = points[i];
         var amplitude = narrow ? narrowAmplitudePrepared(
@@ -538,9 +541,7 @@
     var toTrack = settings.toTrack || fromTrack;
     var themeChanges = Math.abs(fromLightBlend - toLightBlend) > 0.0001;
     var paletteMixer = themeChanges ? createPaletteMixer(fromPalette, toPalette) : null;
-    var startedAt = now();
-    var timelineAt = startedAt;
-    var timelineElapsed = 0;
+    var startedAt = 0;
     var showingNewState = false;
 
     this.stop();
@@ -556,16 +557,10 @@
     document.body.classList.remove("theme-changing");
     setResetVisualTrack(fromTrack);
     if (themeChanges) applyThemePalette(fromPalette, fromLightBlend);
+    startedAt = now();
 
     function getResetElapsed(timestamp) {
-      var cueTime = settings.getCueTime && settings.getCueTime();
-      if (Number.isFinite(cueTime)) {
-        timelineElapsed = Math.max(timelineElapsed, cueTime * 1000);
-      } else {
-        timelineElapsed += Math.max(timestamp - timelineAt, 0);
-      }
-      timelineAt = timestamp;
-      return timelineElapsed;
+      return Math.max(timestamp - startedAt, 0);
     }
 
     function drawResetFrame(timestamp) {
@@ -750,8 +745,6 @@
   function bindParticleMotion() {
     var state = document.getElementById("playback-state");
     var selector = document.querySelector(".selector");
-    var media = document.getElementById("audio-player");
-    var switchCueUrl = new URL("audio/ui-switch.wav", document.baseURI).href;
     var activeTrack = "";
     var cueStartedTrack = "";
     var previousPlaybackState = state.dataset.state;
@@ -777,7 +770,9 @@
       if (changed) {
         if (hadTrack) {
           if (playbackState === "counting" && cueStartedTrack !== track) {
-            renderer.stop();
+            // Keep the current field moving while the cue source starts. The
+            // Reset begins on switchcueplaying, so freezing here only exposes
+            // audio setup latency as a visible hitch.
             document.body.classList.add("resetting");
             renderer.resetVisualTrack = renderer.resetVisualTrack || activeTrack;
             setResetVisualTrack(renderer.resetVisualTrack);
@@ -802,10 +797,6 @@
             },
             isPlaying: function () {
               return state.dataset.state === "playing";
-            },
-            getCueTime: function () {
-              if (media.paused || media.currentSrc !== switchCueUrl) return null;
-              return media.currentTime;
             }
           });
           cueStartedTrack = "";
