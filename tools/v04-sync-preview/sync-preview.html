@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SEEEN V04 | Audio Sync Preview</title>
+  <style>
+    :root { color-scheme: dark; font: 100%/1.5 system-ui, sans-serif; }
+    body { margin: auto; padding: 1.25rem; max-width: 66rem; background: #111316; color: #edf0f1; }
+    h1 { font-size: clamp(1.45rem, 4vw, 2.4rem); margin: 0; }
+    h2 { font-size: 1.15rem; margin: 0 0 .65rem; }
+    p { margin: .5rem 0; }
+    .muted { color: #bac3c8; }
+    .workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; margin: 1rem 0; }
+    .screen { position: relative; overflow: hidden; align-self: start; aspect-ratio: 388 / 375; border-radius: .6rem; background: #080808; }
+    .screen[data-theme="bright"] { background: #f2f2f0; }
+    canvas { position: absolute; width: 171.91%; left: -1.55%; display: block; }
+    .panel { background: #1b2024; border: 1px solid #3a4248; border-radius: .6rem; padding: 1rem; min-width: 0; }
+    .group { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; margin: .75rem 0; }
+    button, select, input, textarea { font: inherit; }
+    button, select, input[type=number], textarea { box-sizing: border-box; border: 1px solid #637078; border-radius: .35rem; padding: .34rem .54rem; background: #14191c; color: inherit; }
+    button { cursor: pointer; }
+    button:disabled { opacity: .48; cursor: default; }
+    :focus-visible { outline: 2px solid #9ce0d1; outline-offset: 3px; }
+    #play { background: #a6e2d5; color: #142521; font-weight: 700; }
+    input[type=range] { width: 100%; accent-color: #a6e2d5; margin: .4rem 0; }
+    input[type=number] { width: 6rem; }
+    #marks { position: relative; height: 1.35rem; background: #14191c; border-radius: .2rem; margin: 0 .45rem; }
+    #marks i { position: absolute; height: .55rem; top: .1rem; border-left: 1px solid #a6e2d5; }
+    #marks i.echo { top: .73rem; height: .45rem; border-color: #f2b879; }
+    .direct { color: #a6e2d5; } .echo-text { color: #f2b879; }
+    .grid { overflow: auto; max-height: 25rem; }
+    table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    th, td { padding: .46rem .55rem; text-align: left; border-bottom: 1px solid #3a4248; white-space: nowrap; }
+    th { position: sticky; top: 0; background: #1b2024; }
+    tr.selected { background: #28423e; }
+    tr.active td:first-child { box-shadow: inset 3px 0 #a6e2d5; }
+    output, #time { font-variant-numeric: tabular-nums; }
+    textarea { width: 100%; }
+    @media (max-width: 46rem) { .workspace { grid-template-columns: 1fr; } .screen { width: min(100%, 30rem); margin: auto; } }
+  </style>
+  <script defer src="preview-renderer.js"></script>
+  <script defer src="timeline.js"></script>
+  <script defer src="sync-preview.js"></script>
+</head>
+<body>
+  <header>
+    <h1>SEEEN V04 · Audio Sync Preview</h1>
+    <p class="muted">STEP 01.1 · 直接ノック候補と粒子波のタイミング検証</p>
+  </header>
+  <main>
+    <div class="workspace">
+      <div id="screen" class="screen" data-theme="bright">
+        <canvas id="particle-field" aria-label="ノックに同期する粒子波"></canvas>
+      </div>
+      <section class="panel" aria-label="再生と同期調整">
+        <label for="track">音源</label>
+        <select id="track">
+          <option value="bright-wide">BRIGHT / WIDE</option>
+          <option value="bright-narrow">BRIGHT / NARROW</option>
+          <option value="dark-wide">DARK / WIDE</option>
+          <option value="dark-narrow">DARK / NARROW</option>
+        </select>
+        <p id="status" role="status">読み込み中</p>
+        <audio id="audio" loop playsinline preload="metadata"></audio>
+        <div class="group">
+          <button id="play" type="button" disabled>再生</button>
+          <label><input type="checkbox" id="loop" checked> ループ</label>
+          <output id="time">0.000 / 124.700 秒</output>
+        </div>
+        <input id="seek" aria-label="再生位置" type="range" min="0" max="124.7" step=".001" value="0" disabled>
+        <div id="marks" aria-hidden="true"></div>
+        <p class="muted"><span class="direct">緑 上段 · 直接音</span>　<span class="echo-text">橙 下段 · 反響候補</span></p>
+        <div class="group">
+          <button id="previous" type="button" disabled>前のノック</button>
+          <button id="next" type="button" disabled>次のノック</button>
+        </div>
+        <div class="group">
+          <label for="offset">全体の表示オフセット</label>
+          <input id="offset" type="number" min="-500" max="500" step="1" value="0" disabled> ms
+        </div>
+        <p class="muted">正の値で粒子波が遅れます。時刻ボタンは発音候補の0.25秒前に移動します。</p>
+        <p id="wave">発生中の波なし</p>
+        <p id="performance" class="muted"></p>
+      </section>
+    </div>
+    <section class="panel">
+      <h2>ノックと反響の確認</h2>
+      <div class="group">
+        <strong id="selection">候補を選択</strong>
+        <label for="correction">選択候補の補正</label>
+        <input type="number" id="correction" min="-500" max="500" step="1" value="0" disabled> ms
+        <label for="verdict">判定</label>
+        <select id="verdict" disabled>
+          <option value="">未確認</option><option value="ok">一致</option>
+          <option value="false-positive">誤検出</option><option value="timing">時刻ずれ</option>
+          <option value="echo-review">反響要確認</option>
+        </select>
+      </div>
+      <div class="grid">
+        <table>
+          <thead><tr><th>候補</th><th>検出時刻 (秒)</th><th>表示時刻 (秒)</th><th>反響候補 (秒／遅れ)</th><th>判定</th></tr></thead>
+          <tbody id="events"></tbody>
+        </table>
+      </div>
+      <div class="group">
+        <button id="missing" type="button" disabled>現在位置を検出漏れ候補に記録</button>
+        <button id="export" type="button" disabled>確認結果をJSONで保存</button>
+      </div>
+      <p class="muted">補正と判定はこのページ内の確認用です。閉じる前に必要な記録を保存してください。</p>
+      <label for="notes">確認メモ</label>
+      <textarea id="notes" rows="2" disabled></textarea>
+      <p id="missing-list" class="muted"></p>
+    </section>
+  </main>
+</body>
+</html>
