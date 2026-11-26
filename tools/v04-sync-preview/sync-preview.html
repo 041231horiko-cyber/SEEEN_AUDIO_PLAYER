@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SEEEN V04 | Audio Sync Preview</title>
+  <title>SEEEN V04 STEP 01.3 | Soft Reflection</title>
   <style>
     :root { color-scheme: dark; font: 100%/1.5 system-ui, sans-serif; }
     body { margin: auto; padding: 1.25rem; max-width: 66rem; background: #111316; color: #edf0f1; }
@@ -49,7 +49,7 @@
 <body>
   <header>
     <h1>SEEEN V04 · Audio Sync Preview</h1>
-    <p class="muted">STEP 01.1 · 直接ノック候補と粒子波のタイミング検証</p>
+    <p class="muted">STEP 01.3 · Soft Reflection</p>
   </header>
   <main>
     <div class="workspace">
@@ -87,16 +87,26 @@
         <p id="performance" class="muted"></p>
         <fieldset id="narrow-controls" hidden>
           <legend>NARROWの反射</legend>
-          <label for="narrow-mode">速度方式
+          <label for="narrow-mode">比較モード
             <select id="narrow-mode">
-              <option value="asymmetric" selected>非対称（試作）</option>
+              <option value="base" selected>BASE</option>
+              <option value="cushion">CUSHION</option>
+              <option value="deceleration">DECELERATION</option>
+              <option value="combined">COMBINED</option>
               <option value="legacy">従来（等速）</option>
             </select>
           </label>
-          <label for="diffusionMs">拡散時間 <span><input id="diffusionMs" type="number" min="100" max="3000" step="1" value="500"> ms</span></label>
-          <label for="returnMs">反射・収束時間 <span><input id="returnMs" type="number" min="200" max="6000" step="1" value="1200"> ms</span></label>
-          <label for="boundaryPercent">反射境界距離 <span><input id="boundaryPercent" type="number" min="35" max="100" step="1" value="75"> %</span></label>
-          <label for="decayPercent">反射波の減衰 <span><input id="decayPercent" type="number" min="0" max="100" step="1" value="65"> %</span></label>
+          <p class="muted">BASEは380 ms／1,800 ms／境界70%／追加明度減衰0%。</p>
+          <label for="diffusionMs">拡散時間 <span><input id="diffusionMs" type="number" min="100" max="3000" step="1" value="380" readonly> ms</span></label>
+          <label for="returnMs">反射・収束の基準時間 <span><input id="returnMs" type="number" min="200" max="6000" step="1" value="1800" readonly> ms</span></label>
+          <label for="boundaryPercent">反射境界距離 <span><input id="boundaryPercent" type="number" min="35" max="100" step="1" value="70" readonly> %</span></label>
+          <label for="edit-base">前版の基準値調整も使う <input id="edit-base" type="checkbox"></label>
+          <label for="decayPercent">追加明度減衰（比較用） <span><input id="decayPercent" type="number" min="0" max="100" step="1" value="0"> %</span></label>
+          <label for="cushionMs">クッション時間 <span><input id="cushionMs" type="number" min="0" max="150" step="1" value="60" disabled> ms</span></label>
+          <label for="compressionPercent">圧縮強度 <span><input id="compressionPercent" type="number" min="0" max="30" step="1" value="5" disabled> %</span></label>
+          <label for="speedDecayPercent">速度減衰 <span><input id="speedDecayPercent" type="number" min="0" max="90" step="1" value="55" disabled> %</span></label>
+          <label for="startSpeedPercent">反射開始速度（BASE比） <span><input id="startSpeedPercent" type="number" min="50" max="100" step="1" value="100" disabled> %</span></label>
+          <button id="reset-narrow" type="button">基準値に戻す</button>
           <p id="reflection-timing" class="muted"></p>
         </fieldset>
       </section>

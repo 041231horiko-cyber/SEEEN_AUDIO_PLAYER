@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const {test} = require("node:test");
-const {activeWaves, adjustedEvents, lifetimes, narrowDefaults, narrowTravel} = require("./timeline");
+const {activeWaves, adjustedEvents, lifetimes, narrowDefaults, softDefaults, narrowTravel,
+  cushionCompression, reflectionSeconds, wallSpeed} = require("./timeline");
 
 // Synthetic unit fixtures only. The package uses all 35 original timestamps.
 const events = adjustedEvents([
@@ -45,12 +46,12 @@ test("global and individual offsets are sorted by adjusted time", () => {
 
 test("asymmetric travel hits the wall and endpoint at the specified independent times", () => {
   assert.equal(narrowTravel(0, narrowDefaults), 0);
-  assert.equal(narrowTravel(.5, narrowDefaults), 1);
-  assert.equal(narrowTravel(1.7, narrowDefaults), 2.19);
+  assert.equal(narrowTravel(.38, narrowDefaults), 1);
+  assert.equal(narrowTravel(2.18, narrowDefaults), 2.19);
   assert.equal(narrowTravel(.5), .33);
   const slowerReturn = {...narrowDefaults, returnMs: 2000};
-  assert.equal(narrowTravel(.5, slowerReturn), 1);
-  assert.ok(narrowTravel(1.7, slowerReturn) < 2.19);
+  assert.equal(narrowTravel(.38, slowerReturn), 1);
+  assert.ok(narrowTravel(2.18, slowerReturn) < 2.19);
 });
 
 test("travel stays strictly forward with continuous, positive wall velocity across slider extremes", () => {
@@ -78,4 +79,51 @@ test("longer NARROW settings keep both direct waves active on the same clock", (
   assert.deepEqual(activeWaves(events, 4.55, "narrow", profile).map(wave => wave.id), [1, 0]);
   assert.deepEqual(activeWaves(events, 4.55, "narrow").map(wave => wave.id), [1]);
   assert.deepEqual(activeWaves(events, 4.55, "wide", profile), activeWaves(events, 4.55, "wide"));
+});
+
+test("cushion ramps in and out without changing the travel", () => {
+  const profile = {...narrowDefaults, ...softDefaults, speedDecayPercent: 0};
+  assert.equal(cushionCompression(.38, profile), 0);
+  assert.ok(Math.abs(cushionCompression(.41, profile) - .05) < 1e-12);
+  assert.equal(cushionCompression(.44, profile), 0);
+  assert.equal(cushionCompression(.41, {...profile, cushionMs: 0}), 0);
+  assert.equal(cushionCompression(.41, {...profile, compressionPercent: 0}), 0);
+  assert.equal(narrowTravel(.41, profile), narrowTravel(.41, narrowDefaults));
+});
+
+test("deceleration preserves the default wall speed and extends the return", () => {
+  const profile = {...narrowDefaults, ...softDefaults};
+  const end = .38 + reflectionSeconds(profile);
+  assert.ok(Math.abs(end - 2.862758620689655) < 1e-9);
+  assert.equal(wallSpeed(profile), wallSpeed(narrowDefaults));
+  assert.equal(narrowTravel(.38, profile), 1);
+  assert.equal(narrowTravel(end, profile), 2.19);
+  let previousSpeed = Infinity;
+  let position = 1;
+  for (let i = 1; i <= 1000; i++) {
+    const next = narrowTravel(.38 + (end - .38) * i / 1000, profile);
+    const step = next - position;
+    assert.ok(step > 0 && step < previousSpeed);
+    previousSpeed = step;
+    position = next;
+  }
+  const half = {...profile, startSpeedPercent: 50};
+  const eps = 1e-7;
+  const before = (1 - narrowTravel(.38 - eps, half)) / eps;
+  const after = (narrowTravel(.38 + eps, half) - 1) / eps;
+  assert.ok(Math.abs(before - after) < 1e-5);
+  assert.ok(Math.abs(after - wallSpeed(half)) < 1e-5);
+});
+
+test("zero speed decay reproduces the BASE reflection even with a stored custom start speed", () => {
+  const zero = {...narrowDefaults, speedDecayPercent: 0, startSpeedPercent: 50};
+  for (let i = 0; i <= 250; i++) assert.equal(narrowTravel(i / 100, zero), narrowTravel(i / 100, narrowDefaults));
+  assert.equal(reflectionSeconds(zero), 1.8);
+});
+
+test("carry soft tails across a natural wrap, with no tail from an explicit seek", () => {
+  const profile = {...narrowDefaults, ...softDefaults, speedDecayPercent: 90, startSpeedPercent: 50};
+  const waves = activeWaves(events, 1.21, "narrow", profile, 124.7);
+  assert.deepEqual(waves.map(wave => wave.id), [0, 2]);
+  assert.deepEqual(activeWaves(events, 1.21, "narrow", profile).map(wave => wave.id), [0]);
 });

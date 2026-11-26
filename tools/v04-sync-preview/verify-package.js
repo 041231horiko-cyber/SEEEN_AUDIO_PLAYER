@@ -88,43 +88,86 @@ function setControl(id, value) {
 }
 
 function checkNarrow(renderer, track, hit, visible) {
-  assert.match(get("reflection-timing").textContent, /\+500 ms.*\+1700 ms/);
+  assert.match(get("reflection-timing").textContent, /\+380 ms.*72\.5 px\/s.*1800 ms.*\+2180 ms/);
   assert.match(get("reflection-timing").textContent, /反響候補との差/);
-  seek(hit.time + .5 - 1e-6);
+  get("edit-base").checked = true;
+  get("edit-base").onchange({target: get("edit-base")});
+  assert.equal(get("diffusionMs").readOnly, false);
+  setControl("diffusionMs", 410);
+  assert.match(get("reflection-timing").textContent, /壁到達 \+410 ms/);
+  get("edit-base").checked = false;
+  get("edit-base").onchange({target: get("edit-base")});
+  assert.equal(get("diffusionMs").readOnly, true);
+  assert.equal(get("diffusionMs").value, 380);
+  seek(hit.time + .38 - 1e-6);
   const before = drawn;
-  seek(hit.time + .5 + 1e-6);
+  seek(hit.time + .38 + 1e-6);
   for (const [id, dot] of before.entries()) {
     assert.deepEqual(drawn[id].slice(0, 3), dot.slice(0, 3));
     assert.ok(Math.abs(drawn[id][3] - dot[3]) < .001);
   }
   const boundary = renderer.previewBoundaryPoints;
-  setControl("boundaryPercent", 70);
-  assert.notEqual(renderer.previewBoundaryPoints, boundary);
-  const shifted = renderer.previewBoundaryPoints;
   setControl("decayPercent", 100);
-  assert.equal(renderer.previewBoundaryPoints, shifted);
+  assert.equal(renderer.previewBoundaryPoints, boundary);
   seek(hit.time + 1.25);
   const quieter = drawn;
   setControl("decayPercent", 0);
   assert.ok(drawn.some((dot, id) => dot[3] > quieter[id][3] + .01));
-  seek(hit.time + 1.699);
+  seek(hit.time + 2.179);
   assert.ok(drawn.slice(0, -1).every(dot => dot[3] < .001));
-  seek(hit.time + 1.75);
+  seek(hit.time + 2.2);
   assert.equal(canvas.dataset.eventIds, "");
   assert.equal(arcs, 1);
-  setControl("returnMs", 5000);
+  seek(hit.time + .41);
+  const unpressed = drawn;
+  setControl("narrow-mode", "cushion");
+  assert.match(get("reflection-timing").textContent, /クッション終了 \+440 ms/);
+  let changed = 0;
+  for (const [id, dot] of unpressed.entries()) {
+    assert.deepEqual(drawn[id].slice(0, 3), dot.slice(0, 3));
+    if (drawn[id][3] !== dot[3]) {
+      assert.ok(drawn[id][3] < dot[3]);
+      assert.ok(drawn[id][3] >= 0);
+      const {centerX, centerY, narrowHalf} = env.SEEENParticleField.constants;
+      assert.ok(Math.max(Math.abs(dot[0]-centerX), Math.abs(dot[1]-centerY)) <= narrowHalf * .7);
+      changed++;
+    }
+  }
+  assert.ok(changed > 0 && changed < visible / 2);
+  seek(hit.time + .44);
+  const released = drawn;
+  setControl("narrow-mode", "base");
+  assert.deepEqual(drawn, released);
+
+  setControl("narrow-mode", "combined");
+  assert.match(get("reflection-timing").textContent, /72\.5 px\/s.*2483 ms.*\+2863 ms/);
+  setControl("speedDecayPercent", 90);
+  setControl("startSpeedPercent", 50);
   seek(track.knockEvents[1].time + .1);
   assert.equal(canvas.dataset.eventIds, "2,1");
   assert.equal(arcs, visible + 1, "overlapping waves share a single particle draw");
+  checkPlaybackWrap(track);
   setControl("narrow-mode", "legacy");
   assert.match(get("reflection-timing").textContent, /\+1515 ms.*\+3318 ms/);
-  assert.ok(get("returnMs").disabled);
+  assert.ok(get("speedDecayPercent").disabled);
   seek(hit.time + 1.75);
   assert.equal(canvas.dataset.eventIds, "1");
-  setControl("narrow-mode", "asymmetric");
-  setControl("returnMs", 1200);
-  setControl("boundaryPercent", 75);
-  setControl("decayPercent", 65);
+  get("reset-narrow").onclick();
+  assert.equal(get("decayPercent").value, 0);
+  assert.equal(get("narrow-mode").value, "base");
+}
+
+function checkPlaybackWrap(track) {
+  media.play();
+  frameAt(124.69);
+  frameAt(.01);
+  assert.ok(canvas.dataset.eventIds.split(",").includes("35"));
+  const first = track.knockEvents[0].time;
+  frameAt(first + .02);
+  assert.ok(canvas.dataset.eventIds.startsWith("1,35"));
+  media.pause();
+  seek(first + .02);
+  assert.equal(canvas.dataset.eventIds, "1");
 }
 
 async function verify() {
@@ -158,6 +201,11 @@ async function verify() {
     frameAt(hit.time + .66);
     closeTo(+canvas.dataset.time, .66);
     assert.equal(canvas.dataset.eventIds, "1");
+    if (!narrow) {
+      frameAt(track.knockEvents[1].time + .03);
+      assert.equal(canvas.dataset.eventIds, "2,1");
+      assert.equal(arcs, visible + 1);
+    }
     await get("play").onclick();
     assert.equal(pending.size, 0);
     seek(hit.time - .001);

@@ -1,4 +1,4 @@
-"""Package a private STEP 01.1 preview using analysis output from STEP 01."""
+"""Package the private STEP 01.3 preview using analysis output from STEP 01."""
 
 import argparse
 import hashlib
@@ -30,7 +30,7 @@ def preview_renderer():
     source = replace_once(
         source,
         '  if (!renderStaticPreview()) bindParticleMotion();',
-        '  // STEP 01.1 owns the only animation loop.',
+        '  // The sync preview owns the only animation loop.',
     )
     source = replace_once(source, '  function wideAmplitude(point, time) {',
         '''  // Keep the V03 raised cosine and radial shading, using only its central
@@ -45,7 +45,16 @@ def preview_renderer():
   function wideAmplitude(point, time) {''')
     source = replace_once(source,
         'function narrowAmplitudePrepared(point, travel, blend, focus, fade) {',
-        '''function narrowAmplitudePrepared(point, travel, blend, focus, fade, reflectionGain) {''')
+        '''function narrowAmplitudePrepared(point, travel, blend, focus, fade, reflectionGain, compression) {''')
+    source = replace_once(source, '''    var merged = Math.max(0, g(point.d[0] - travel, 0.07) * point.wall0 * 0.85);
+    merged = Math.max(merged, g(point.d[1] - travel, 0.07) * point.wall1 * 0.85);
+    merged = Math.max(merged, g(point.d[2] - travel, 0.07) * point.wall2 * 0.85);
+    merged = Math.max(merged, g(point.d[3] - travel, 0.07) * point.wall3 * 0.85);''',
+        '''    var press = compression > 0 && point.cushion;
+    var merged = Math.max(0, g(point.d[0] - travel, press ? 0.07 * (1 - compression * press[0]) : 0.07) * point.wall0 * 0.85);
+    merged = Math.max(merged, g(point.d[1] - travel, press ? 0.07 * (1 - compression * press[1]) : 0.07) * point.wall1 * 0.85);
+    merged = Math.max(merged, g(point.d[2] - travel, press ? 0.07 * (1 - compression * press[2]) : 0.07) * point.wall2 * 0.85);
+    merged = Math.max(merged, g(point.d[3] - travel, press ? 0.07 * (1 - compression * press[3]) : 0.07) * point.wall3 * 0.85);''')
     source = replace_once(source, '''    var combined = Math.max(direct, merged);
     var value = (combined * (1 - blend) + converge * blend) * fade;''',
         '''    var gain = reflectionGain === undefined ? 1 : reflectionGain;
@@ -59,6 +68,7 @@ def preview_renderer():
     this.previewBoundaryPoints = this.narrow.map(function (point) {
       var x = point.x / ratio;
       var y = point.y / ratio;
+      var inside = Math.max(Math.abs(x), Math.abs(y)) <= 1;
       return {
         r: Math.hypot(x, y),
         d: [Math.hypot(x - 2, y), Math.hypot(x + 2, y), Math.hypot(x, y - 2), Math.hypot(x, y + 2)],
@@ -66,6 +76,10 @@ def preview_renderer():
         wall1: smooth(-x / 0.2),
         wall2: smooth(y / 0.2),
         wall3: smooth(-y / 0.2),
+        cushion: inside ? [
+          smooth((x - 0.82) / 0.18), smooth((-x - 0.82) / 0.18),
+          smooth((y - 0.82) / 0.18), smooth((-y - 0.82) / 0.18)
+        ] : null,
         boundaryMask: 1 - smooth((Math.max(Math.abs(x), Math.abs(y)) - 1) / 0.08),
         gain: point.gain
       };
@@ -83,7 +97,8 @@ def preview_renderer():
       var fade = 1 - smooth((travel - 1.97) / 0.22);
       return [
         travel, smooth((travel - 1.32) / 0.55), Math.max(0, 2 - travel),
-        fade, profile ? 1 - (profile.decayPercent / 100) * smooth((travel - 1) / 1.19) : 1
+        fade, profile ? 1 - (profile.decayPercent / 100) * smooth((travel - 1) / 1.19) : 1,
+        window.SEEENSyncTimeline.cushionCompression(age, profile)
       ];
     });
     var i;''')
@@ -91,14 +106,18 @@ def preview_renderer():
           point, narrowTravel, narrowBlend, narrowFocus, narrowFade
         ) : wideAmplitudePrepared(point, wideTimePhase);''', '''        var amplitude = 0;
         var sampled = boundary ? boundary[i] : point;
+        var floor = boundary ? 0.014 * point.gain : 0;
         for (var waveIndex = 0; waveIndex < waves.length; waveIndex += 1) {
           var wave = waves[waveIndex];
-          var level = narrow ? narrowAmplitudePrepared(
-            sampled, wave[0], wave[1], wave[2], wave[3], wave[4]
-          ) : singleWideAmplitude(point, wave);
-          if (boundary) {
-            var floor = 0.014 * point.gain;
-            level = floor * wave[3] + (level - floor) * sampled.boundaryMask;
+          var level;
+          if (boundary && sampled.boundaryMask === 0) {
+            // The geometry mask makes only the existing floor visible here.
+            level = floor * wave[3];
+          } else {
+            level = narrow ? narrowAmplitudePrepared(
+              sampled, wave[0], wave[1], wave[2], wave[3], wave[4], wave[5]
+            ) : singleWideAmplitude(point, wave);
+            if (boundary) level = floor * wave[3] + (level - floor) * sampled.boundaryMask;
           }
           amplitude = Math.max(amplitude, level);
         }''')

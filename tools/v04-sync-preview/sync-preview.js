@@ -26,22 +26,49 @@
   let blobUrl;
   let frame = 0;
   let snapshot;
+  let carryNarrowTail = false;
   let activeRows = [];
   let lastReport = 0;
   let lookupTotal = 0;
   let renderTotal = 0;
   let samples = 0;
   let renderedSamples = 0;
-  const narrowSettings = {...timeline.narrowDefaults};
-  const narrowLimits = {diffusionMs: [100, 3000], returnMs: [200, 6000],
-    boundaryPercent: [35, 100], decayPercent: [0, 100]};
-  let narrowProfile = narrowSettings;
+  const narrowSettings = {...timeline.narrowDefaults, ...timeline.softDefaults};
+  const baseLimits = {diffusionMs: [100, 3000], returnMs: [200, 6000], boundaryPercent: [35, 100]};
+  const narrowLimits = {...baseLimits, decayPercent: [0, 100], cushionMs: [0, 150], compressionPercent: [0, 30],
+    speedDecayPercent: [0, 90], startSpeedPercent: [50, 100]};
+  let narrowMode = "base";
+  let narrowProfile = timeline.narrowDefaults;
+
+  function refreshNarrowProfile() {
+    const cushion = narrowMode === "cushion" || narrowMode === "combined";
+    const deceleration = narrowMode === "deceleration" || narrowMode === "combined";
+    narrowProfile = narrowMode === "legacy" ? null : {
+      ...narrowSettings,
+      cushionMs: cushion ? narrowSettings.cushionMs : 0,
+      speedDecayPercent: deceleration ? narrowSettings.speedDecayPercent : 0
+    };
+    byId("edit-base").disabled = !narrowProfile;
+    for (const key of Object.keys(baseLimits)) byId(key).readOnly = !narrowProfile || !byId("edit-base").checked;
+    byId("decayPercent").disabled = !narrowProfile;
+    byId("cushionMs").disabled = byId("compressionPercent").disabled = !cushion;
+    byId("speedDecayPercent").disabled = !deceleration;
+    byId("startSpeedPercent").disabled = !deceleration || !narrowSettings.speedDecayPercent;
+    updateReflectionTiming();
+    draw(true);
+  }
 
   function updateReflectionTiming() {
     if (mode !== "narrow") return;
     const wall = narrowProfile ? narrowProfile.diffusionMs : 1000 / .66;
-    const end = narrowProfile ? wall + narrowProfile.returnMs : timeline.lifetimes.narrow * 1000;
-    let text = "壁到達の目安 +" + Math.round(wall) + " ms · 波の終了 +" + Math.round(end) + " ms";
+    const lifetimeMs = timeline.lifetime("narrow", narrowProfile) * 1000;
+    const speed = timeline.wallSpeed(narrowProfile) * (narrowProfile?.boundaryPercent ?? 100) / 100 *
+      window.SEEENParticleField.constants.narrowHalf;
+    let text = "壁到達 +" + Math.round(wall) + " ms · 反射開始 " + speed.toFixed(1) + " px/s · 収束 " +
+      Math.round(lifetimeMs - wall) + " ms · 波の終了 +" + Math.round(lifetimeMs) + " ms";
+    if (narrowProfile?.cushionMs && narrowProfile.compressionPercent) {
+      text += " · クッション終了 +" + (wall + narrowProfile.cushionMs) + " ms";
+    }
     if (source && selected >= 0) {
       const hit = source.knockEvents[selected];
       const visualWall = adjusted.get(selected) + wall / 1000;
@@ -101,6 +128,8 @@
 
   function jump(time) {
     if (!source) return;
+    carryNarrowTail = false;
+    snapshot = null;
     audio.currentTime = Math.min(source.audioDuration, Math.max(0, time));
     draw(true);
   }
@@ -166,6 +195,7 @@
     blobUrl = null;
     selected = -1;
     snapshot = null;
+    carryNarrowTail = false;
     activeRows = [];
     rows = [];
     enabled(false);
@@ -229,9 +259,13 @@
   function draw(force) {
     const t = source ? audio.currentTime : 0;
     if (!force && snapshot === t) return;
+    if (source && mode === "narrow" && snapshot !== null && snapshot > t) {
+      carryNarrowTail = audio.loop && !audio.paused && snapshot > source.audioDuration - 2 && t < 2;
+    }
     snapshot = t;
     const started = performance.now();
-    const waves = source ? timeline.activeWaves(events, t, mode, narrowProfile) : [];
+    const waves = source ? timeline.activeWaves(events, t, mode, narrowProfile,
+      carryNarrowTail ? source.audioDuration : 0) : [];
     lookupTotal += performance.now() - started;
     samples++;
     if (force || waves.length || activeRows.length) {
@@ -271,10 +305,17 @@
   };
   byId("loop").onchange = event => { audio.loop = event.target.checked; };
   byId("narrow-mode").onchange = event => {
-    narrowProfile = event.target.value === "legacy" ? null : narrowSettings;
-    for (const key of Object.keys(narrowLimits)) byId(key).disabled = !narrowProfile;
-    updateReflectionTiming();
-    draw(true);
+    narrowMode = event.target.value;
+    refreshNarrowProfile();
+  };
+  byId("edit-base").onchange = event => {
+    if (!event.target.checked) {
+      for (const key of Object.keys(baseLimits)) {
+        narrowSettings[key] = timeline.narrowDefaults[key];
+        byId(key).value = narrowSettings[key];
+      }
+    }
+    refreshNarrowProfile();
   };
   for (const [key, [min, max]] of Object.entries(narrowLimits)) {
     byId(key).value = narrowSettings[key];
@@ -282,10 +323,17 @@
       const parsed = event.target.value === "" ? narrowSettings[key] : Number(event.target.value);
       if (Number.isFinite(parsed)) narrowSettings[key] = Math.min(max, Math.max(min, Math.round(parsed)));
       event.target.value = narrowSettings[key];
-      updateReflectionTiming();
-      draw(true);
+      refreshNarrowProfile();
     };
   }
+  byId("reset-narrow").onclick = () => {
+    narrowMode = "base";
+    byId("narrow-mode").value = narrowMode;
+    byId("edit-base").checked = false;
+    Object.assign(narrowSettings, timeline.narrowDefaults, timeline.softDefaults);
+    for (const key of Object.keys(narrowLimits)) byId(key).value = narrowSettings[key];
+    refreshNarrowProfile();
+  };
   seek.oninput = () => jump(Number(seek.value));
   byId("previous").onclick = () => {
     const id = selected < 0 ? timeline.upperBound(events, audio.currentTime) - 1 : selected - 1;
@@ -327,7 +375,7 @@
     }));
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([JSON.stringify({
-      schemaVersion: 1, results, narrowPreview: {mode: narrowProfile ? "asymmetric" : "legacy", ...narrowSettings}
+      schemaVersion: 1, results, narrowPreview: {mode: narrowMode, ...narrowSettings}
     }, null, 2)],
       {type: "application/json"}));
     link.download = "SEEEN_V04_sync_review.json";
