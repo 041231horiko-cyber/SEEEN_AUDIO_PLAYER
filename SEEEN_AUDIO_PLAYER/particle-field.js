@@ -14,6 +14,9 @@
   // Adopted Reset emission phase: 32% of 900 ms.
   var EMISSION_MS = 288;
   var RESET_MS = 900;
+  // Keep a completed Reset moving through short source/decode gaps, but do not
+  // let the visual run indefinitely when playback cannot begin.
+  var POST_RESET_PLAYBACK_GRACE_MS = 1200;
   var GOLDEN_ANGLE = 2.39996323;
   var CLIP_X = 12;
   var CLIP_Y = 75;
@@ -385,7 +388,7 @@
     }
     this.time = Number.isFinite(settings.time) ? settings.time : this.time;
     this.scale = Number.isFinite(settings.scale) ? settings.scale : this.scale;
-    this.lastFrameAt = 0;
+    this.lastFrameAt = Number.isFinite(settings.lastFrameAt) ? settings.lastFrameAt : 0;
     this.running = true;
     this.motionState = "playing";
     this.stats.loopStarts += 1;
@@ -522,7 +525,8 @@
           mode: self.mode,
           theme: self.theme,
           time: self.time,
-          scale: 1
+          scale: 1,
+          lastFrameAt: timestamp
         });
         return;
       }
@@ -632,11 +636,10 @@
         finishTheme(toTheme);
         clearResetVisualTrack();
         if (settings.isPlaying && settings.isPlaying()) {
-          self.start({ mode: toMode, theme: toTheme, time: self.time, scale: 1 });
+          self.start({ mode: toMode, theme: toTheme, time: self.time, scale: 1, lastFrameAt: timestamp });
         } else if (settings.isPlaybackActive && settings.isPlaybackActive()) {
-          self.motionState = "frozen";
-          self.canvas.dataset.running = "false";
-          self.canvas.dataset.motionState = self.motionState;
+          self.start({ mode: toMode, theme: toTheme, time: self.time, scale: 1, lastFrameAt: timestamp });
+          if (settings.onAwaitingPlayback) settings.onAwaitingPlayback();
         } else {
           self.showPoint({ mode: toMode, theme: toTheme, time: self.time });
         }
@@ -719,7 +722,8 @@
       goldenAngle: GOLDEN_ANGLE,
       stopMs: STOP_MS,
       emissionMs: EMISSION_MS,
-      resetMs: RESET_MS
+      resetMs: RESET_MS,
+      postResetPlaybackGraceMs: POST_RESET_PLAYBACK_GRACE_MS
     },
     formulas: {
       makeWide: makeWide,
@@ -757,6 +761,36 @@
     var activeTrack = "";
     var cueStartedTrack = "";
     var previousPlaybackState = state.dataset.state;
+    var awaitingPlaybackAfterReset = false;
+    var awaitingPlaybackTimer = 0;
+
+    function clearAwaitingPlaybackAfterReset() {
+      awaitingPlaybackAfterReset = false;
+      if (awaitingPlaybackTimer) {
+        window.clearTimeout(awaitingPlaybackTimer);
+        awaitingPlaybackTimer = 0;
+      }
+    }
+
+    function continueThroughShortBuffering() {
+      clearAwaitingPlaybackAfterReset();
+      awaitingPlaybackAfterReset = true;
+      awaitingPlaybackTimer = window.setTimeout(function () {
+        var currentState = state.dataset.state;
+        awaitingPlaybackTimer = 0;
+        if (!awaitingPlaybackAfterReset) return;
+        awaitingPlaybackAfterReset = false;
+        if ((currentState === "counting" || currentState === "loading") && renderer.motionState === "playing") {
+          renderer.collapseToPoint({
+            mode: renderer.mode,
+            theme: renderer.theme,
+            time: renderer.time,
+            scale: renderer.scale,
+            duration: STOP_MS
+          });
+        }
+      }, POST_RESET_PLAYBACK_GRACE_MS);
+    }
 
     function syncParticleMotion() {
       var selected = document.querySelector('[data-track][aria-pressed="true"]');
@@ -770,6 +804,7 @@
       document.body.classList.toggle("particle-active", Boolean(mode));
 
       if (!mode) {
+        clearAwaitingPlaybackAfterReset();
         renderer.stop();
         activeTrack = track;
         previousPlaybackState = playbackState;
@@ -777,6 +812,7 @@
       }
 
       if (changed) {
+        clearAwaitingPlaybackAfterReset();
         if (hadTrack) {
           if (playbackState === "counting" && cueStartedTrack !== track) {
             // Keep the current field moving while the cue source starts. The
@@ -806,7 +842,8 @@
             },
             isPlaying: function () {
               return state.dataset.state === "playing";
-            }
+            },
+            onAwaitingPlayback: continueThroughShortBuffering
           });
           cueStartedTrack = "";
           activeTrack = track;
@@ -840,12 +877,24 @@
       }
 
       if (document.hidden) {
+        clearAwaitingPlaybackAfterReset();
         renderer.stop();
         if (playbackState === "paused" || playbackState === "idle") {
           renderer.showPoint({ mode: mode, theme: theme, time: renderer.time });
         }
         previousPlaybackState = playbackState;
         return;
+      }
+
+      if (awaitingPlaybackAfterReset) {
+        if (playbackState === "playing") {
+          clearAwaitingPlaybackAfterReset();
+        } else if (playbackState === "counting" || playbackState === "loading") {
+          previousPlaybackState = playbackState;
+          return;
+        } else {
+          clearAwaitingPlaybackAfterReset();
+        }
       }
 
       if (playbackState === "playing") {
@@ -872,6 +921,12 @@
         if (previousPlaybackState === "playing" || renderer.motionState === "playing" || renderer.motionState === "emitting") {
           renderer.collapseToPoint({ mode: mode, theme: theme, time: renderer.time, scale: renderer.scale, duration: STOP_MS });
         } else if (renderer.motionState !== "collapsing" && renderer.motionState !== "point" && previousPlaybackState !== "counting") {
+          renderer.showPoint({ mode: mode, theme: theme, time: renderer.time });
+        }
+      } else if (playbackState === "error") {
+        if (renderer.motionState === "playing" || renderer.motionState === "emitting") {
+          renderer.collapseToPoint({ mode: mode, theme: theme, time: renderer.time, scale: renderer.scale, duration: STOP_MS });
+        } else if (renderer.motionState !== "collapsing" && renderer.motionState !== "point") {
           renderer.showPoint({ mode: mode, theme: theme, time: renderer.time });
         }
       } else {
