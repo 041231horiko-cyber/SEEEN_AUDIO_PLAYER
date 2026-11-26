@@ -1,5 +1,43 @@
 # SEEEN / Exhibition Audio Player
 
+## Current V03 development target
+
+現在の正式実装は **V03 STEP 13.3**、基準コミットは `8b4edd2` です。
+
+- 正式な開発対象: [`SEEEN_AUDIO_PLAYER/`](./SEEEN_AUDIO_PLAYER/)
+- 正式なGitHub Pages URL: <https://041231horiko-cyber.github.io/SEEEN_AUDIO_PLAYER/SEEEN_AUDIO_PLAYER/>
+- リポジトリ直下のアプリと`SEEEN_AUDIO_PLAYER/SEEEN_AUDIO_PLAYER/`は旧実装です。最新版として使用・変更しないでください。
+- 正式Service Worker: `seeen-audio-v39`
+- 最優先互換環境: iPhone 7 / iOS 15
+
+### Quick start
+
+ビルドは不要です。リポジトリルートから正式ディレクトリへ移動して起動します。
+
+```sh
+cd SEEEN_AUDIO_PLAYER
+python3 -m http.server 3000 --bind 127.0.0.1
+```
+
+Codex Cloudでは、環境に設定されたHTTP Previewポートを確認し、通常は`--bind 0.0.0.0`で起動します。詳しくは[`docs/CLOUD_SETUP.md`](./docs/CLOUD_SETUP.md)を参照してください。
+
+### Documentation
+
+- エージェント作業ルール: [`AGENTS.md`](./AGENTS.md)
+- 開発経緯・引き継ぎ: [`docs/DEVELOPMENT_HANDOFF.md`](./docs/DEVELOPMENT_HANDOFF.md)
+- 確定デザイン・モーション仕様: [`docs/DESIGN_SPEC.md`](./docs/DESIGN_SPEC.md)
+- ローカル / Cloud起動・検証: [`docs/CLOUD_SETUP.md`](./docs/CLOUD_SETUP.md)
+
+### Audio notice
+
+現在リポジトリに含まれる4種類のWAVは、各12秒の開発用テスト音源です。長尺の展示用完成音源はまだ反映されていません。公開可否、容量、ループ品質を確認せずに差し替えないでください。
+
+---
+
+## Legacy project notes
+
+以下は初期実装時から維持している運用・PWA・音声に関する資料です。V03の正式パス、UI、GitHub Pages URL、現在バージョンについては、上記のCurrent V03セクションと`docs/`を優先してください。
+
 iPhone 7（iOS 15 / Safari）向けの、展示専用オフライン音声プレイヤーです。単一の `HTMLAudioElement` だけを使い、4音源を排他的に再生します。外部API・外部ライブラリ・音質処理は使用していません。
 
 ## 現在の状態
