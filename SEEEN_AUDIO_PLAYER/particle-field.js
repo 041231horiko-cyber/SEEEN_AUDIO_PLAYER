@@ -22,6 +22,9 @@
   // Below this scale every particle is hidden beneath the opaque center point,
   // including a one-pixel antialiasing margin. Skip invisible overdraw.
   var PARTICLE_COVERED_SCALE = 0.012;
+  var OCCLUSION_EPSILON = 0.01;
+  var NARROW_FIELD_COVERED_SCALE =
+    (CENTER_RADIUS - 0.42 - OCCLUSION_EPSILON) / (NARROW_HALF * Math.SQRT2);
   var COLORS = {
     dark: "#EEEEEC",
     bright: "#101010"
@@ -188,6 +191,9 @@
       };
       points[i].gain = 0.65 + points[i].j * 0.35;
       points[i].dot = 0.29 + 0.13 * points[i].j;
+      points[i].coveredUntilScale = points[i].r > 0 ?
+        (CENTER_RADIUS - points[i].dot - OCCLUSION_EPSILON) / (NARROW_HALF * points[i].r) :
+        Infinity;
     }
     return points;
   }
@@ -305,6 +311,7 @@
     var narrowBlend;
     var narrowFocus;
     var narrowFade;
+    var coveredScale;
     var i;
 
     if (narrow) {
@@ -331,9 +338,11 @@
     context.clip();
     context.fillStyle = this.color;
 
-    if (scale > PARTICLE_COVERED_SCALE) {
+    coveredScale = narrow ? NARROW_FIELD_COVERED_SCALE : PARTICLE_COVERED_SCALE;
+    if (scale > coveredScale) {
       for (i = 0; i < points.length; i += 1) {
         var point = points[i];
+        if (narrow && scale <= point.coveredUntilScale) continue;
         var amplitude = narrow ? narrowAmplitudePrepared(
           point, narrowTravel, narrowBlend, narrowFocus, narrowFade
         ) : wideAmplitudePrepared(point, wideTimePhase);
