@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SEEEN V04 音源解析レビュー</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 24px auto; padding: 0 16px; max-width: 960px; }
+  audio, img { display: block; width: 100%; margin: 12px 0; }
+  button, select { font: inherit; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { text-align: left; padding: 4px 8px; border-bottom: 1px solid #ddd; }
+  tr.current { background: #dcf4ee; }
+</style>
+<main>
+  <h1>SEEEN V04 音源解析レビュー</h1>
+  <label for="track">音源</label>
+  <select id="track"></select>
+  <button id="load" type="button">SHA-256を照合して読み込む</button>
+  <p id="status" role="status">音源を選び、読み込んでください。</p>
+  <audio id="audio" controls preload="none"></audio>
+  <label><input id="loop" type="checkbox"> ループ</label>
+  <p id="clock">0.000 s</p>
+  <p>時刻ボタンで発音の0.12秒前に移動します。図の緑線は直接音候補、橙の点線は反響候補です。</p>
+  <table>
+    <thead><tr><th>直接音 (秒)</th><th>相対強度</th><th>信頼度指標</th><th>反響候補 (秒)</th></tr></thead>
+    <tbody id="events"></tbody>
+  </table>
+  <details><summary>直接音に分類しなかった強い立ち上がり</summary><ul id="excluded"></ul></details>
+  <figure><img id="plot" alt="波形、スペクトログラム、主旋律プロキシの特徴量"></figure>
+</main>
+<script>
+  "use strict";
+  const tracks = /*__REVIEW_DATA__*/ {};
+  const choice = document.getElementById("track");
+  const load = document.getElementById("load");
+  const status = document.getElementById("status");
+  const audio = document.getElementById("audio");
+  const events = document.getElementById("events");
+  const excluded = document.getElementById("excluded");
+  let currentUrl;
+  let requestId = 0;
+  let frame = 0;
+  let rows = [];
+  let activeRow = null;
+  function seekButton(time) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = time.toFixed(3);
+    button.disabled = !currentUrl;
+    button.onclick = () => { audio.currentTime = Math.max(0, time - .12); };
+    return button;
+  }
+  function showTrack() {
+    const track = tracks[choice.value];
+    if (!track) return;
+    events.replaceChildren();
+    excluded.replaceChildren();
+    activeRow = null;
+    rows = track.knockEvents.map(event => {
+      const row = events.insertRow();
+      row.insertCell().append(seekButton(event.time));
+      row.insertCell().textContent = event.strength.toFixed(3);
+      row.insertCell().textContent = event.confidence.toFixed(2);
+      const echoes = row.insertCell();
+      for (const echo of event.echoes) echoes.append(seekButton(echo.time));
+      if (!event.echoes.length) echoes.textContent = "—";
+      return { row, times: [event.time, ...event.echoes.map(echo => echo.time)] };
+    });
+    for (const item of track.excludedOnsets) {
+      const row = document.createElement("li");
+      row.append(seekButton(item.time), " s / flux " + item.flux);
+      excluded.append(row);
+    }
+    document.getElementById("plot").src = choice.value + ".png";
+    drawClock();
+  }
+  function clearAudio() {
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+    if (currentUrl) URL.revokeObjectURL(currentUrl);
+    currentUrl = null;
+  }
+  function drawClock() {
+    const t = audio.currentTime;
+    document.getElementById("clock").textContent = t.toFixed(3) + " s";
+    const match = rows.find(entry => entry.times.some(time => Math.abs(t - time) <= .09));
+    const row = match ? match.row : null;
+    if (activeRow !== row) {
+      if (activeRow) activeRow.classList.remove("current");
+      if (row) row.classList.add("current");
+      activeRow = row;
+    }
+  }
+  function tick() {
+    drawClock();
+    frame = audio.paused ? 0 : requestAnimationFrame(tick);
+  }
+  audio.addEventListener("playing", () => { if (!frame) frame = requestAnimationFrame(tick); });
+  audio.addEventListener("pause", () => { cancelAnimationFrame(frame); frame = 0; drawClock(); });
+  audio.addEventListener("seeked", drawClock);
+  document.getElementById("loop").onchange = event => { audio.loop = event.target.checked; };
+  for (const key of Object.keys(tracks)) choice.add(new Option(key, key));
+  choice.onchange = () => {
+    requestId += 1;
+    clearAudio();
+    load.disabled = false;
+    status.textContent = "選択した音源を読み込んでください。";
+    showTrack();
+  };
+  load.onclick = async () => {
+    const id = ++requestId;
+    const track = tracks[choice.value];
+    clearAudio();
+    showTrack();
+    load.disabled = true;
+    status.textContent = "SHA-256照合中…";
+    try {
+      if (!window.crypto || !window.crypto.subtle) throw new Error("localhost または HTTPS で開いてください。");
+      const response = await fetch("audio/" + encodeURIComponent(track.audioFile));
+      if (!response.ok) throw new Error("音源が読み込めません (" + response.status + ")");
+      const bytes = await response.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", bytes);
+      const hex = Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, "0")).join("");
+      if (hex !== track.audioSha256) throw new Error("音源のSHA-256が一致しません。");
+      if (id !== requestId) return;
+      currentUrl = URL.createObjectURL(new Blob([bytes], {type: "audio/mp4"}));
+      audio.src = currentUrl;
+      status.textContent = "SHA-256一致。再生ボタンで確認できます。";
+      showTrack();
+    } catch (error) {
+      if (id === requestId) status.textContent = error.message;
+    } finally {
+      if (id === requestId) load.disabled = false;
+    }
+  };
+  if (choice.options.length) {
+    showTrack();
+  } else {
+    load.disabled = true;
+    status.textContent = "analyze.py が生成した review.html を開いてください。";
+  }
+</script>
+</html>
