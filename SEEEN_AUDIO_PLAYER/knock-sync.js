@@ -5,6 +5,8 @@
     diffusionMs: 380, returnMs: 1800, boundaryPercent: 70, decayPercent: 50,
     cushionMs: 100, compressionPercent: 30, speedDecayPercent: 55, startSpeedPercent: 70
   });
+  // Shift only the rendered WIDE waves. Audio and source analysis times stay exact.
+  var WIDE_KNOCK_VISUAL_LEAD_MS = 50;
   const outward = narrow.diffusionMs / 1000;
   const inward = narrow.returnMs / 1000;
   const remaining = 1.19;
@@ -44,6 +46,15 @@
       else right = mid;
     }
     return left;
+  }
+
+  function renderedEventTimes(times, mode, duration) {
+    if (mode !== "wide" || WIDE_KNOCK_VISUAL_LEAD_MS === 0) return times;
+    var lead = WIDE_KNOCK_VISUAL_LEAD_MS / 1000;
+    return times.map(function (time) {
+      var scheduled = time - lead;
+      return scheduled < 0 ? duration + scheduled : scheduled;
+    });
   }
 
   function waveAges(times, time, mode, previousCycleDuration) {
@@ -97,7 +108,8 @@
             !times.every((time, i) => Number.isFinite(time) && time >= 0 && time < data.audioDuration &&
               (!i || time > times[i - 1]))) throw new Error("Knock data does not match this track");
         if (task.signal.aborted || request !== task) return;
-        dataset = {times, duration: data.audioDuration};
+        const mode = key.endsWith("-wide") ? "wide" : "narrow";
+        dataset = {times: renderedEventTimes(times, mode, data.audioDuration), duration: data.audioDuration};
         loaded.set(key, dataset);
       }).catch(error => {
         if (!task.signal.aborted) console.warn("[SEEEN knock sync]", error);
@@ -122,7 +134,8 @@
     return {select, sample};
   }
 
-  const sync = {narrow, lifetimes, narrowTravel, cushionCompression, waveAges, createClock};
+  const sync = {narrow, lifetimes, narrowTravel, cushionCompression, waveAges, renderedEventTimes,
+    wideLeadMs: WIDE_KNOCK_VISUAL_LEAD_MS, createClock};
   if (typeof module === "object") module.exports = sync;
   else root.SEEENKnockSync = sync;
 }(typeof window === "object" ? window : undefined));

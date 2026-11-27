@@ -32,6 +32,21 @@ async function checkClock() {
     const times = entry.knockEvents.map(event => event.time);
     const atOnset = times.map(t => sync.waveAges(times, t, mode, entry.audioDuration).length);
     assert.equal(Math.max(...atOnset), 2);
+    const rendered = sync.renderedEventTimes(times, mode, entry.audioDuration);
+    if (mode === "wide") {
+      assert.equal(sync.wideLeadMs, 50);
+      assert.equal(rendered[0], times[0] - 0.05);
+      assert.equal(sync.waveAges(rendered, rendered[0], mode, entry.audioDuration)[0], 0);
+      assert.ok(Math.abs(sync.waveAges(rendered, times[0], mode, entry.audioDuration)[0] - 0.05) < 1e-9);
+      const last = times[times.length - 1];
+      const beforeWrap = sync.waveAges(rendered, last - 0.05, mode, entry.audioDuration)[0];
+      const afterWrap = sync.waveAges(rendered, 0.02, mode, entry.audioDuration)[0];
+      assert.equal(beforeWrap, 0);
+      assert.ok(Math.abs(afterWrap - (entry.audioDuration - last + 0.07)) < 1e-9);
+    } else {
+      assert.equal(rendered, times);
+      assert.equal(sync.wideLeadMs, 50);
+    }
   }
 }
 
@@ -381,6 +396,7 @@ async function checkWorker() {
   assert.equal(claimCount, 1);
   const status = await instance.message("CHECK_OFFLINE_STATUS");
   assert.equal(status.ready, true);
+  assert.match(status.cacheName, /^seeen-v04-step02-1-v1:/);
   assert.equal(status.switchCueCached, true);
   const store = stores.get(status.cacheName);
   assert.equal(store.size, 22);

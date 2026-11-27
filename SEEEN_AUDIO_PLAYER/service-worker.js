@@ -2,7 +2,7 @@
 
 // 完成音源を同じファイル名で差し替えたら、この値を必ず更新する。
 var SCOPE = self.registration.scope;
-var CACHE_VERSION = "seeen-v04-step02-v1:" + SCOPE;
+var CACHE_VERSION = "seeen-v04-step02-1-v1:" + SCOPE;
 var V03_SCOPE = "https://041231horiko-cyber.github.io/SEEEN_AUDIO_PLAYER/SEEEN_AUDIO_PLAYER/";
 var APP_ASSETS = [
   "./",
