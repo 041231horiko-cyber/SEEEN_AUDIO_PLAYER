@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja" data-theme="bright">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SEEEN — Melody Audio Preview</title>
+  <link rel="stylesheet" href="preview.css">
+  <script defer src="knock-sync.js"></script>
+  <script defer src="step021-particles.js"></script>
+  <script defer src="melody.js"></script>
+  <script defer src="preview.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <span class="brand">SEEEN<span>.</span></span>
+      <span class="step">V04 / STEP 03.3</span>
+    </header>
+    <div class="layout">
+      <section class="stage" aria-label="粒子ビジュアライザー">
+        <div class="stage-head">
+          <div><span class="eyebrow">MELODY AUDIO PREVIEW</span><h1>02 — Interference</h1></div>
+          <span class="count"><b id="particle-count">6,500</b> 粒子</span>
+        </div>
+        <div class="particle-frame">
+          <canvas id="field" width="376" height="287" role="img" aria-label="主旋律とノック音に同期する粒子"></canvas>
+        </div>
+        <div class="readouts">
+          <div>
+            <h2>持続音の特徴量</h2>
+            <dl><div><dt>RMS</dt><dd id="current-rms">—</dd></div>
+                <div><dt>スペクトル重心</dt><dd id="current-centroid">—</dd></div>
+                <div><dt>高域 / 低域</dt><dd id="current-bands">—</dd></div></dl>
+          </div>
+          <div>
+            <h2>実効パラメータ</h2>
+            <dl><div><dt>明度</dt><dd id="current-light">—</dd></div>
+                <div><dt>波長</dt><dd id="current-wave">—</dd></div>
+                <div><dt>干渉バランス</dt><dd id="current-balance">—</dd></div>
+                <div><dt>速度</dt><dd id="current-speed">—</dd></div>
+                <div><dt>描画中のノック波</dt><dd id="current-knocks">—</dd></div></dl>
+          </div>
+        </div>
+      </section>
+      <section class="controls" aria-label="比較操作">
+        <div class="control-head"><h2>比較操作</h2><p id="status" role="status">準備中</p></div>
+        <audio id="audio" preload="metadata" loop></audio>
+        <div class="transport">
+          <label>音源<select id="track"><option value="bright-wide">BRIGHT / WIDE</option><option value="bright-narrow">BRIGHT / NARROW</option><option value="dark-wide">DARK / WIDE</option><option value="dark-narrow">DARK / NARROW</option></select></label>
+          <div class="playback">
+            <button type="button" id="play" disabled>再生</button>
+            <div class="position"><div class="timeline-label"><label for="seek">再生位置</label><span><span id="time">0:00.00</span> / <span id="duration">–</span></span></div><input id="seek" type="range" min="0" max="124.7" value="0" step="0.01" disabled></div>
+          </div>
+        </div>
+        <div class="mode-grid">
+          <label>比較モード<select id="preset"><option>BASE</option><option>AMPLITUDE</option><option>FREQUENCY</option><option>COMBINED</option></select></label>
+          <label>表示レイヤー<select id="layers"><option value="melody">MELODY ONLY</option><option value="knock">KNOCK ONLY</option><option value="both" selected>BOTH</option></select></label>
+        </div>
+        <fieldset><legend>基準値</legend>
+          <label class="slider"><span>基準明度</span><input type="range" data-setting="brightness" min="0" max="100" step="1" value="30"><output>30%</output></label>
+          <label class="slider"><span>基準波長</span><input type="range" data-setting="wavelength" min="30" max="160" step="1" value="80"><output>80%</output></label>
+          <label class="slider"><span>動作速度</span><input type="range" data-setting="speed" min="0" max="250" step="1" value="150"><output>150%</output></label>
+          <label class="slider"><span>基準干渉バランス</span><input type="range" data-setting="balance" min="0" max="100" step="1" value="50"><output>50%</output></label>
+        </fieldset>
+        <details>
+          <summary>連動する範囲と平滑化</summary>
+          <div class="ranges">
+          <label class="slider"><span>明度の下限</span><input type="range" data-setting="brightnessMin" min="0" max="100" step="1" value="20"><output>20%</output></label>
+          <label class="slider"><span>明度の上限</span><input type="range" data-setting="brightnessMax" min="0" max="100" step="1" value="40"><output>40%</output></label>
+          <label class="slider"><span>波長の下限</span><input type="range" data-setting="wavelengthMin" min="30" max="160" step="1" value="65"><output>65%</output></label>
+          <label class="slider"><span>波長の上限</span><input type="range" data-setting="wavelengthMax" min="30" max="160" step="1" value="95"><output>95%</output></label>
+          <label class="slider"><span>干渉比の下限</span><input type="range" data-setting="balanceMin" min="0" max="100" step="1" value="35"><output>35%</output></label>
+          <label class="slider"><span>干渉比の上限</span><input type="range" data-setting="balanceMax" min="0" max="100" step="1" value="65"><output>65%</output></label>
+          <label class="slider"><span>平滑化時間</span><input type="range" data-setting="smoothing" min="0" max="2000" step="50" value="400"><output>400 ms</output></label>
+          </div>
+          <p>干渉比の値は二つ目の波の割合です。</p>
+        </details>
+        <div class="actions">
+          <button type="button" class="secondary" id="reset">採用値に戻す</button>
+          <button type="button" class="secondary" id="save" disabled>レビューJSONを保存</button>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
