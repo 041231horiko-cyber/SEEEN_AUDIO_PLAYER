@@ -15,24 +15,61 @@ const read = name => fs.readFileSync(path.join(app, name));
 const data = key => JSON.parse(read("knock-data/" + key + ".json"));
 const href = key => new URL("audio/" + data(key).audioFile, scope).href;
 
-function expectedWidePhase(age, strength) {
-  const maxPhase = 13 + Math.PI;
-  const duration = maxPhase / 3.5;
-  const p = Math.max(0, Math.min(1, age / duration));
-  return maxPhase * (p + strength * (1 - Math.pow(1 - p, 3) - p));
+function expectedHermite(y0, y1, m0, m1, t) {
+  const t2 = t * t, t3 = t2 * t;
+  return (2*t3 - 3*t2 + 1)*y0 + (t3 - 2*t2 + t)*m0 +
+    (-2*t3 + 3*t2)*y1 + (t3 - t2)*m1;
 }
 
-function checkWideEasing(formulas, constants) {
-  const duration = (13 + Math.PI) / 3.5;
-  assert.equal(constants.wideExpansionEasingStrength, .5);
-  for (const age of [0, .01, .1, duration * .25, duration * .5, duration * .9, duration]) {
-    assert.equal(formulas.wideExpansionPhase(age, 0), age * 3.5,
-      "zero strength must reproduce legacy WIDE distance");
-    assert.ok(Math.abs(formulas.wideExpansionPhase(age, .5) - expectedWidePhase(age, .5)) < 1e-12,
-      "50% strength must follow the approved curve");
+function expectedWideProgress(age, duration) {
+  const initialDuration = .5, ratio = .45;
+  const joinVelocity = 1.5 * (1-ratio) / (duration-initialDuration);
+  const initialVelocity = 2 * ratio / initialDuration;
+  if (age <= 0) return 0;
+  if (age < initialDuration) {
+    const q = age / initialDuration;
+    return expectedHermite(0, ratio, initialVelocity*initialDuration,
+      joinVelocity*initialDuration, q);
   }
-  assert.equal(formulas.wideExpansionPhase(0, .5), 0);
-  assert.equal(formulas.wideExpansionPhase(duration, .5), 13 + Math.PI);
+  const u = Math.max(0, Math.min(1, (age-initialDuration)/(duration-initialDuration)));
+  return expectedHermite(ratio, 1, joinVelocity*(duration-initialDuration), 0, u);
+}
+
+function checkWideCurve(formulas, constants) {
+  const duration = (13 + Math.PI) / 3.5;
+  assert.equal(constants.wideInitialExpansionRatio, .45);
+  assert.equal(constants.wideInitialExpansionDurationMs, 500);
+  assert.equal(constants.wideMaxPhase, 13 + Math.PI);
+  assert.ok(Math.abs(formulas.wideExpansionProgress(.5)-.45) < 1e-12);
+  let previous = -1;
+  for (let i=0; i<=1000; i++) {
+    const age = duration*i/1000;
+    const value = formulas.wideExpansionProgress(age);
+    assert.ok(value >= previous, "WIDE expansion must not reverse");
+    assert.ok(Math.abs(value-expectedWideProgress(age,duration)) < 1e-12,
+      "production curve must match the approved Hermite construction");
+    previous = value;
+  }
+  assert.equal(formulas.wideExpansionPhase(0), 0);
+  assert.equal(formulas.wideExpansionPhase(duration), 13 + Math.PI);
+  const step = 1e-6;
+  const atJoinFromLeft = (formulas.wideExpansionProgress(.5)-formulas.wideExpansionProgress(.5-step))/step;
+  const atJoinFromRight = (formulas.wideExpansionProgress(.5+step)-formulas.wideExpansionProgress(.5))/step;
+  const joinVelocity = 1.5*.55/(duration-.5);
+  assert.ok(Math.abs(atJoinFromLeft-atJoinFromRight) < 1e-5, "join velocity must be continuous");
+  assert.ok(Math.abs(atJoinFromLeft-joinVelocity) < 1e-5);
+  assert.ok(Math.abs((formulas.wideExpansionProgress(step)-formulas.wideExpansionProgress(0))/step-1.8) < 1e-4);
+  assert.ok((1-formulas.wideExpansionProgress(duration-step))/step < 1e-4,
+    "expansion speed should settle to zero at maximum distance");
+  const epsilon = 1e-5;
+  let previousSpeed = 1.8;
+  for (let i=1; i<1000; i++) {
+    const age=duration*i/1000;
+    const speed=(formulas.wideExpansionProgress(age+epsilon)-
+      formulas.wideExpansionProgress(age-epsilon))/(2*epsilon);
+    assert.ok(speed <= previousSpeed+1e-5, "WIDE expansion speed must decrease monotonically");
+    previousSpeed=speed;
+  }
 }
 
 async function checkClock() {
@@ -223,7 +260,7 @@ function loadApp({readAsset = read, withMelody = true, fetchAsset = async name =
 
 async function checkApp(previewDirectory) {
   const app = loadApp();
-  checkWideEasing(app.formulas, app.constants);
+  checkWideCurve(app.formulas, app.constants);
   const oldDraw = captureRenderer(previewDirectory);
   const previewTimeline = require(path.resolve(previewDirectory, "timeline.js"));
   for (const mode of ["wide", "narrow"]) for (const theme of ["bright", "dark"]) {
@@ -238,13 +275,13 @@ async function checkApp(previewDirectory) {
         wrapped && mode === "narrow" ? 124.7 : 0).map(wave => wave.age);
       const args = {mode, theme, scale: waveAges.length ? 1 : 0, waveAges};
       const expectedWaves = mode === "wide" && !wrapped ?
-        waveAges.map(age => expectedWidePhase(age, .5) / 3.5) : previewWaves;
+        waveAges.map(age => expectedWideProgress(age, sync.lifetimes.wide) * (13+Math.PI) / 3.5) : previewWaves;
       const before = oldDraw({...args, scale: expectedWaves.length ? 1 : 0, waveAges: expectedWaves,
         narrowProfile: sync.narrow}), after = app.capture(args);
       if (wrapped && mode === "wide") {
         assert.equal(before.length, 0);
         assert.equal(waveAges.length, 1);
-        assert.ok(after.some(dot => dot[3] > .05));
+        assert.ok(after.some(dot => dot[3] > .02), "wrapped WIDE wave retains a visible tail");
         continue;
       }
       assert.equal(before.length, after.length);
@@ -428,7 +465,7 @@ async function checkWorker() {
   assert.equal(claimCount, 1);
   const status = await instance.message("CHECK_OFFLINE_STATUS");
   assert.equal(status.ready, true);
-  assert.equal(status.cacheName, "seeen-v04-step061-v1:" + scope);
+  assert.equal(status.cacheName, "seeen-v04-step062-v1:" + scope);
   assert.equal(status.switchCueCached, true);
   const store = stores.get(status.cacheName);
   assert.equal(store.size, 24);

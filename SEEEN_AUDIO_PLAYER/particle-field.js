@@ -10,9 +10,11 @@
   var CENTER_RADIUS = 3.4;
   var WIDE_COUNT = 6500;
   var NARROW_COUNT = 9500;
-  // Ease only the WIDE knock wave's spatial expansion. Its audio-clock age,
-  // lifetime and opacity envelope remain linear and unchanged.
-  var WIDE_EXPANSION_EASING_STRENGTH = 0.5;
+  // WIDE knock spatial expansion has two velocity-continuous Hermite segments.
+  // Audio-clock age, event timing, lifetime and opacity remain unchanged.
+  var WIDE_INITIAL_EXPANSION_RATIO = 0.45;
+  var WIDE_INITIAL_EXPANSION_DURATION_MS = 500;
+  var WIDE_MAX_PHASE = 13 + Math.PI;
   var STOP_MS = 420;
   // Adopted Reset emission phase: 32% of 900 ms.
   var EMISSION_MS = 288;
@@ -274,7 +276,7 @@
   }
 
   function prepareWave(age, mode) {
-    if (mode === "wide") return wideExpansionPhase(age, WIDE_EXPANSION_EASING_STRENGTH);
+    if (mode === "wide") return wideExpansionPhase(age);
     var travel = knock.narrowTravel(age);
     return [
       travel, smooth((travel - 1.32) / 0.55), Math.max(0, 2 - travel),
@@ -284,15 +286,39 @@
     ];
   }
 
-  function wideExpansionPhase(age, strength) {
-    var amount = Math.max(0, Math.min(1, strength));
-    if (amount === 0) return age * 3.5;
-    var maxPhase = 13 + Math.PI;
-    var duration = maxPhase / 3.5;
-    var p = Math.max(0, Math.min(1, age / duration));
-    var linear = p;
-    var eased = linear + amount * (1 - Math.pow(1 - p, 3) - linear);
-    return maxPhase * eased;
+  function hermiteProgress(y0, y1, startSlope, endSlope, t) {
+    var t2 = t * t;
+    var t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * y0 +
+      (t3 - 2 * t2 + t) * startSlope +
+      (-2 * t3 + 3 * t2) * y1 +
+      (t3 - t2) * endSlope;
+  }
+
+  function wideExpansionProgress(age) {
+    var duration = knock.lifetimes.wide;
+    var initialDuration = WIDE_INITIAL_EXPANSION_DURATION_MS / 1000;
+    var initialRatio = WIDE_INITIAL_EXPANSION_RATIO;
+    // This sets the same physical velocity on both sides of the join. With
+    // the post-join Hermite slopes at 1.5 * (1 - ratio) and zero, its velocity
+    // simplifies to joinVelocity * (1 - u * u), so it never re-accelerates.
+    var joinVelocity = 1.5 * (1 - initialRatio) / (duration - initialDuration);
+    var initialVelocity = 2 * initialRatio / initialDuration;
+
+    if (age <= 0) return 0;
+    if (age < initialDuration) {
+      var q = Math.max(0, Math.min(1, age / initialDuration));
+      return hermiteProgress(0, initialRatio,
+        initialVelocity * initialDuration, joinVelocity * initialDuration, q);
+    }
+
+    var u = Math.max(0, Math.min(1, (age - initialDuration) / (duration - initialDuration)));
+    return hermiteProgress(initialRatio, 1,
+      joinVelocity * (duration - initialDuration), 0, u);
+  }
+
+  function wideExpansionPhase(age) {
+    return WIDE_MAX_PHASE * wideExpansionProgress(age);
   }
 
   function synchronizedAmplitude(point, sampled, waves) {
@@ -824,7 +850,9 @@
       emissionMs: EMISSION_MS,
       resetMs: RESET_MS,
       postResetPlaybackGraceMs: POST_RESET_PLAYBACK_GRACE_MS,
-      wideExpansionEasingStrength: WIDE_EXPANSION_EASING_STRENGTH
+      wideInitialExpansionRatio: WIDE_INITIAL_EXPANSION_RATIO,
+      wideInitialExpansionDurationMs: WIDE_INITIAL_EXPANSION_DURATION_MS,
+      wideMaxPhase: WIDE_MAX_PHASE
     },
     formulas: {
       makeWide: makeWide,
@@ -834,6 +862,7 @@
       narrowAmplitude: narrowAmplitude,
       narrowDot: narrowDot,
       resetPhase: resetPhase,
+      wideExpansionProgress: wideExpansionProgress,
       wideExpansionPhase: wideExpansionPhase,
       mix: mix
     }

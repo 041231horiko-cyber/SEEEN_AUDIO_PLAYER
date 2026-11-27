@@ -17,10 +17,23 @@ const profiles = melody.prepareData(data, scope);
 const near = (actual, expected, epsilon = 1e-11) =>
   assert.ok(Math.abs(actual - expected) <= epsilon, actual + " vs " + expected);
 function expectedWideAge(age) {
-  const maxPhase = 13 + Math.PI;
-  const duration = maxPhase / 3.5;
-  const p = Math.max(0, Math.min(1, age / duration));
-  return maxPhase * (0.5 * p + 0.5 * (1 - Math.pow(1 - p, 3))) / 3.5;
+  const duration = knock.lifetimes.wide, initialDuration = .5, ratio = .45;
+  const joinVelocity = 1.5 * (1-ratio) / (duration-initialDuration);
+  const hermite = (y0,y1,m0,m1,t) => {
+    const t2=t*t, t3=t2*t;
+    return (2*t3-3*t2+1)*y0 + (t3-2*t2+t)*m0 +
+      (-2*t3+3*t2)*y1 + (t3-t2)*m1;
+  };
+  let progress;
+  if (age <= 0) progress = 0;
+  else if (age < initialDuration) {
+    const q=age/initialDuration;
+    progress=hermite(0,ratio,2*ratio,joinVelocity*initialDuration,q);
+  } else {
+    const u=Math.max(0,Math.min(1,(age-initialDuration)/(duration-initialDuration)));
+    progress=hermite(ratio,1,joinVelocity*(duration-initialDuration),0,u);
+  }
+  return progress*(13+Math.PI)/3.5;
 }
 
 const previewPath = path.resolve(process.argv[2]);

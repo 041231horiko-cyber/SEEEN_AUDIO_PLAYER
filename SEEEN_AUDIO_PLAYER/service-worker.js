@@ -2,7 +2,7 @@
 
 // キャッシュ対象を同じURLで更新したら、この値を必ず更新する。
 var SCOPE = self.registration.scope;
-var CACHE_VERSION = "seeen-v04-step061-v1:" + SCOPE;
+var CACHE_VERSION = "seeen-v04-step062-v1:" + SCOPE;
 var V03_SCOPE = "https://041231horiko-cyber.github.io/SEEEN_AUDIO_PLAYER/SEEEN_AUDIO_PLAYER/";
 var APP_ASSETS = [
   "./",
