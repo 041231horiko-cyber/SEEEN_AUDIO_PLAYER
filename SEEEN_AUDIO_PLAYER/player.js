@@ -9,7 +9,7 @@
   var cueOperation = 0;
   var announcedCueOperation = 0;
   var V03_SCOPE = "https://041231horiko-cyber.github.io/SEEEN_AUDIO_PLAYER/SEEEN_AUDIO_PLAYER/";
-  var OFFLINE_CACHE_PREFIX = "seeen-v04-step071-v1:";
+  var OFFLINE_CACHE_PREFIX = "seeen-v04-extra02-v1:";
 
   var TRACKS = {
     "bright-wide": {

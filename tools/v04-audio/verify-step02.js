@@ -465,7 +465,7 @@ async function checkWorker() {
   assert.equal(claimCount, 1);
   const status = await instance.message("CHECK_OFFLINE_STATUS");
   assert.equal(status.ready, true);
-  assert.equal(status.cacheName, "seeen-v04-step071-v1:" + scope);
+  assert.equal(status.cacheName, "seeen-v04-extra02-v1:" + scope);
   assert.equal(status.switchCueCached, true);
   const store = stores.get(status.cacheName);
   assert.equal(store.size, 26);

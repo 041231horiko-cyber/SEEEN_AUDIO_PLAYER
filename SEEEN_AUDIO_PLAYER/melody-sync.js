@@ -5,6 +5,9 @@
   const profile = Object.freeze({brightness: 30, brightnessMin: 20, brightnessMax: 40,
     wavelength: 80, speed: 150, balance: 50, smoothing: 400});
   const limits = [-41.1, -16.9];
+  // The final DARK mix raises the melody by 3 dB. Offset the analysis
+  // profile only so that its visualization retains the original response.
+  const darkVisualGainDb = 3;
   const mix = (a, b, t) => a + (b - a) * t;
   const mod = (n, size) => ((n % size) + size) % size;
 
@@ -68,7 +71,8 @@
           !series.every(value => Number.isInteger(value) && value >= -1000 && value <= 0)) {
         throw new Error("STEP 04 RMS series mismatch");
       }
-      profiles.set(theme, smooth(series.map(value => value / 10), interval, profile.smoothing));
+      const samples = smooth(series.map(value => value / 10), interval, profile.smoothing);
+      profiles.set(theme, theme === "dark" ? samples.map(value => value - darkVisualGainDb) : samples);
     }
     const tracks = new Map();
     for (const [key, track] of Object.entries(data.tracks)) {
