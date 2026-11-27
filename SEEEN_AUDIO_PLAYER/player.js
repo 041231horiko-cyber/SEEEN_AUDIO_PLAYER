@@ -9,7 +9,7 @@
   var cueOperation = 0;
   var announcedCueOperation = 0;
   var V03_SCOPE = "https://041231horiko-cyber.github.io/SEEEN_AUDIO_PLAYER/SEEEN_AUDIO_PLAYER/";
-  var OFFLINE_CACHE_PREFIX = "seeen-v04-step02-v1:";
+  var OFFLINE_CACHE_PREFIX = "seeen-v04-step04-v1:";
 
   var TRACKS = {
     "bright-wide": {
@@ -35,6 +35,10 @@
     return fetch(url, options);
   }, document.baseURI);
   window.SEEENKnockSync.clock = knockClock;
+  var melodyClock = window.SEEENMelodySync.createClock(function (url) {
+    return fetch(url);
+  }, document.baseURI);
+  window.SEEENMelodySync.clock = melodyClock;
   var playToggle = document.getElementById("play-toggle");
   var nowPlaying = document.getElementById("now-playing");
   var playbackState = document.getElementById("playback-state");
@@ -115,6 +119,7 @@
     cueOperation = useCue ? thisOperation : 0;
     switchingOperation = thisOperation;
     if (!skipCue) knockClock.select(key, track.src);
+    melodyClock.select(key, track.src);
     clearError();
     setSelectedTrack(key);
     setPlaybackState(useCue ? "counting" : "loading", useCue ? "COUNT IN" : "LOADING");
@@ -321,6 +326,7 @@
       if (!offlineReady(result)) {
         throw new Error("Cache incomplete");
       }
+      if (currentTrackKey) melodyClock.preload();
       setOfflineState("ready", "READY", false);
       announcement.textContent = "オフライン保存が完了";
     } catch (error) {
@@ -446,12 +452,22 @@
     }
     if (!isExpectedSource()) return;
     var endedOperation = operationId;
+    melodyClock.restartLoop(audio);
     audio.currentTime = 0;
     audio.play().catch(function () {
       if (operationId !== endedOperation) return;
       setPlaybackState("error", "ERROR");
       showError("ループ再開に失敗しました。音源ボタンをタップして復旧してください。");
     });
+  });
+
+  audio.addEventListener("seeking", function () {
+    if (isExpectedSource()) melodyClock.seek(audio);
+  });
+
+  audio.addEventListener("timeupdate", function () {
+    // Keep counting wraps even if requestAnimationFrame pauses in the background.
+    if (!audio.paused && isExpectedSource()) melodyClock.observe(audio);
   });
 
   document.addEventListener("visibilitychange", function () {

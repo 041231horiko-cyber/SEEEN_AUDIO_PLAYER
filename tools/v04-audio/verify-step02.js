@@ -70,7 +70,7 @@ function element() {
   };
 }
 
-function loadApp() {
+function loadApp({readAsset = read, withMelody = true, fetchAsset = async name => new Response(readAsset(name))} = {}) {
   const elements = new Map();
   const get = id => {
     if (!elements.has(id)) elements.set(id, element());
@@ -123,7 +123,7 @@ function loadApp() {
   const env = Object.assign(element(), {
     document, location: new URL(scope), navigator: {}, isSecureContext: true, devicePixelRatio: 1,
     URL, URLSearchParams, AbortController, Event, CustomEvent, console,
-    fetch: async name => new Response(read(name)),
+    fetch: fetchAsset,
     performance: {now: () => time}, setTimeout, clearTimeout,
     MutationObserver: class { constructor(callback) { observers.push(callback); } observe() {} },
     requestAnimationFrame(callback) { requests.set(++id, callback); return id; },
@@ -131,8 +131,10 @@ function loadApp() {
   });
   env.window = env;
   vm.createContext(env);
-  for (const name of ["knock-sync.js", "player.js", "particle-field.js"]) {
-    vm.runInContext(read(name).toString(), env, {filename: name});
+  const scripts = ["knock-sync.js", "player.js", "particle-field.js"];
+  if (withMelody) scripts.splice(1, 0, "melody-sync.js");
+  for (const name of scripts) {
+    vm.runInContext(readAsset(name).toString(), env, {filename: name});
   }
   const renderer = env.SEEENParticleField.renderer;
   const render = renderer.render;
@@ -179,6 +181,7 @@ function loadApp() {
   }
   return {
     audio, renderer, state, document, events, get, select, toggle, endCue, camera: canvas, flush, settle, frame, advance,
+    melodyClock: env.SEEENMelodySync?.clock,
     capture(settings) { capture = true; renderer.render(settings); capture = false; return arcs.slice(0, -1); },
     collect(value) { collect = value; },
     pending() { return requests.size; },
@@ -286,6 +289,7 @@ async function checkApp(previewDirectory) {
       assert.equal(renderer.motionState, "playing");
       assert.equal(app.document.body.classList.contains("bright"), to.startsWith("bright"));
       assert.equal(renderer.lastRender.waveAges.length, 0);
+      assert.equal(renderer.lastRender.melodyFrame.f, to.startsWith("bright") ? 47.5 : 18.75);
       app.select(from);
       await app.settle();
       app.endCue();
@@ -342,6 +346,8 @@ async function checkWorker() {
     }
   };
   await (await caches.open("seeen-audio-v39")).put(scope, new Response("old V03"));
+  const oldCache = await caches.open("seeen-v04-step02-1-v1:" + scope);
+  await oldCache.put(new URL("index.html", scope).href, new Response("old STEP 02.1"));
   let offline = false, failPath = "", claimCount = 0;
   const v03Scope = "https://041231horiko-cyber.github.io/SEEEN_AUDIO_PLAYER/SEEEN_AUDIO_PLAYER/";
   function worker(workerScope) {
@@ -385,23 +391,27 @@ async function checkWorker() {
   }
   await assert.rejects(worker(v03Scope).lifetime("install"), /separate/);
   const instance = worker(scope);
-  failPath = "audio/bright_narrow_loop_125s_test.m4a";
+  failPath = "melody-data/step04-rms.json";
   await assert.rejects(instance.lifetime("install"), /interrupted/);
   assert.equal(claimCount, 0);
   assert.equal((await instance.message("CHECK_OFFLINE_STATUS")).ready, false);
   assert.equal(await (await (await caches.open("seeen-audio-v39")).match(scope)).text(), "old V03");
+  assert.equal(await (await oldCache.match(new URL("index.html", scope).href)).text(), "old STEP 02.1");
   failPath = null;
   await instance.lifetime("install");
   await instance.lifetime("activate");
   assert.equal(claimCount, 1);
   const status = await instance.message("CHECK_OFFLINE_STATUS");
   assert.equal(status.ready, true);
-  assert.match(status.cacheName, /^seeen-v04-step02-1-v1:/);
+  assert.equal(status.cacheName, "seeen-v04-step04-v1:" + scope);
   assert.equal(status.switchCueCached, true);
   const store = stores.get(status.cacheName);
-  assert.equal(store.size, 22);
+  assert.equal(store.size, 24);
   offline = true;
   assert.equal(await (await instance.fetch("", null, "navigate")).text(), read("index.html").toString());
+  for (const name of ["knock-sync.js", "melody-sync.js", "melody-data/step04-rms.json"]) {
+    assert.equal(await (await instance.fetch(name)).text(), read(name).toString());
+  }
   for (const key of keys) {
     const entry = data(key);
     const name = "audio/" + entry.audioFile;
@@ -427,13 +437,26 @@ async function checkWorker() {
   const cue = await instance.fetch("audio/ui-switch.wav", "bytes=0-11");
   assert.equal(cue.headers.get("Content-Type"), "audio/wav");
   assert.equal(Buffer.from(await cue.arrayBuffer()).toString("ascii", 8), "WAVE");
-  store.delete(new URL("knock-data/bright-wide.json", scope).href);
+  const offlineApp = loadApp({fetchAsset: name => instance.fetch(name)});
+  for (const [index, key] of keys.entries()) {
+    offlineApp.select(key);
+    await offlineApp.settle();
+    if (index) {
+      offlineApp.endCue();
+      await offlineApp.settle();
+    }
+    offlineApp.advance(58, 1.55);
+    assert.equal(offlineApp.audio.currentSrc, href(key));
+    assert.ok(offlineApp.renderer.lastRender.melodyFrame);
+    assert.ok(offlineApp.renderer.lastRender.waveAges.length);
+  }
+  store.delete(new URL("melody-data/step04-rms.json", scope).href);
   assert.equal((await instance.message("CHECK_OFFLINE_STATUS")).ready, false);
   assert.equal((await instance.message("CACHE_ALL_ASSETS")).ready, false);
   offline = false;
   assert.equal((await instance.message("CACHE_ALL_ASSETS")).ready, true);
   assert.equal(instance.fetch("unknown"), undefined);
-  console.log("Worker simulation: 22 assets, update failure/repair, offline reload, four complete MP4 streams, 206/416 and WAV passed.");
+  console.log("Worker simulation: 24 assets, update failure/repair, offline sync data and scripts, four MP4 streams, 206/416 and WAV passed.");
 }
 
 async function main() {
@@ -443,3 +466,4 @@ async function main() {
   await checkWorker();
 }
 if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });
+module.exports = {loadApp, checkWorker};

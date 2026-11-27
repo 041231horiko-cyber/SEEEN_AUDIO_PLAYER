@@ -54,6 +54,8 @@
   };
   var PALETTE_KEYS = ["background", "panel", "inactive", "primary", "muted", "yes", "no"];
   var knock = window.SEEENKnockSync;
+  var melody = window.SEEENMelodySync;
+  var EMPTY_WAVES = Object.freeze([]);
 
   function clamp(x) {
     return Math.max(0, Math.min(1, x));
@@ -308,6 +310,8 @@
     this.context = canvas.getContext("2d");
     this.wide = makeWide(WIDE_COUNT);
     this.narrow = makeNarrow(NARROW_COUNT);
+    this.wide.forEach(function (point) { melody.preparePoint(point, false); });
+    this.narrow.forEach(function (point) { melody.preparePoint(point, true); });
     this.reflection = reflectionGeometry(this.narrow);
     this.lastRender = null;
     this.mode = "wide";
@@ -383,6 +387,7 @@
     var narrowFade;
     var coveredScale;
     var waveAges = settings.waveAges;
+    var melodyFrame = settings.melodyFrame;
     var waves = waveAges && waveAges.map(function (age) { return prepareWave(age, mode); });
     var fieldOpacity = settings.fieldOpacity === undefined ? 1 : settings.fieldOpacity;
     var i;
@@ -403,7 +408,7 @@
     this.time = time;
     this.scale = scale;
     this.lastRender = {mode: mode, theme: theme, color: this.color, time: time, scale: scale,
-      waveAges: waveAges, fieldOpacity: fieldOpacity};
+      waveAges: waveAges, melodyFrame: melodyFrame, fieldOpacity: fieldOpacity};
     this.resize();
 
     context.clearRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
@@ -414,13 +419,14 @@
     context.fillStyle = this.color;
 
     coveredScale = narrow ? NARROW_FIELD_COVERED_SCALE : PARTICLE_COVERED_SCALE;
-    if (scale > coveredScale && fieldOpacity > 0 && (!waves || waves.length)) {
+    if (scale > coveredScale && fieldOpacity > 0 && (melodyFrame || !waves || waves.length)) {
       for (i = 0; i < points.length; i += 1) {
         var point = points[i];
         if (narrow && scale <= point.coveredUntilScale) continue;
         var amplitude = waves ? synchronizedAmplitude(point, narrow ? this.reflection[i] : null, waves) : narrow ? narrowAmplitudePrepared(
           point, narrowTravel, narrowBlend, narrowFocus, narrowFade
         ) : wideAmplitudePrepared(point, wideTimePhase);
+        if (melodyFrame) amplitude = Math.max(amplitude, melody.alpha(point, melodyFrame));
         context.globalAlpha = clamp(amplitude * scale * fieldOpacity);
         context.beginPath();
         context.arc(
@@ -470,16 +476,18 @@
     var media = document.getElementById("audio-player");
     function drawFrame() {
       if (!self.running) return;
+      self.frame = requestAnimationFrame(drawFrame);
+      if (media.seeking) return;
       var ages = knock.clock.sample(media);
+      var melodyFrame = melody.clock.sample(media);
       // Hold through a media stall or while waiting for the selected source.
-      // Empty frames are drawn once, then only the inexpensive clock is polled.
-      if (ages !== null && (!self.lastRender || self.lastRender.waveAges !== ages ||
-          self.lastRender.scale !== 1 || self.lastRender.fieldOpacity !== 1)) {
+      if ((ages !== null || melodyFrame) && (!self.lastRender || self.lastRender.waveAges !== (ages || EMPTY_WAVES) ||
+          self.lastRender.melodyFrame !== melodyFrame || self.lastRender.scale !== 1 || self.lastRender.fieldOpacity !== 1)) {
         self.stats.loopFrames += 1;
         self.canvas.dataset.loopFrames = String(self.stats.loopFrames);
-        self.render({mode: self.mode, theme: self.theme, time: media.currentTime, scale: 1, waveAges: ages});
+        self.render({mode: self.mode, theme: self.theme, time: media.currentTime, scale: 1,
+          waveAges: ages || EMPTY_WAVES, melodyFrame: melodyFrame});
       }
-      self.frame = requestAnimationFrame(drawFrame);
     }
 
     this.frame = requestAnimationFrame(drawFrame);
@@ -762,6 +770,7 @@
         time: fixedTime,
         scale: self.scale,
         waveAges: outgoing && outgoing.waveAges,
+        melodyFrame: outgoing && outgoing.melodyFrame,
         fieldOpacity: outgoing ? outgoing.fieldOpacity : 1
       });
 
@@ -891,6 +900,9 @@
       if (changed) {
         clearAwaitingPlaybackAfterReset();
         if (hadTrack) {
+          if (renderer.lastRender && renderer.lastRender.melodyFrame) {
+            renderer.render(Object.assign({}, renderer.lastRender, {melodyFrame: null}));
+          }
           if (playbackState === "counting" && cueStartedTrack !== track) {
             // Keep the current field moving while the cue source starts. The
             // Reset begins on switchcueplaying, so freezing here only exposes

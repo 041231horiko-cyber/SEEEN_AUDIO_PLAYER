@@ -1,14 +1,15 @@
 "use strict";
 
-// 完成音源を同じファイル名で差し替えたら、この値を必ず更新する。
+// キャッシュ対象を同じURLで更新したら、この値を必ず更新する。
 var SCOPE = self.registration.scope;
-var CACHE_VERSION = "seeen-v04-step02-1-v1:" + SCOPE;
+var CACHE_VERSION = "seeen-v04-step04-v1:" + SCOPE;
 var V03_SCOPE = "https://041231horiko-cyber.github.io/SEEEN_AUDIO_PLAYER/SEEEN_AUDIO_PLAYER/";
 var APP_ASSETS = [
   "./",
   "./index.html",
   "./style.css",
   "./knock-sync.js",
+  "./melody-sync.js",
   "./player.js",
   "./particle-field.js",
   "./field.js",
@@ -21,7 +22,8 @@ var APP_ASSETS = [
   "./knock-data/bright-wide.json",
   "./knock-data/bright-narrow.json",
   "./knock-data/dark-wide.json",
-  "./knock-data/dark-narrow.json"
+  "./knock-data/dark-narrow.json",
+  "./melody-data/step04-rms.json"
 ];
 var AUDIO_ASSETS = [
   "./audio/ui-switch.wav",
