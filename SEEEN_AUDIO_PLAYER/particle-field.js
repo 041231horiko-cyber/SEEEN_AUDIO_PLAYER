@@ -62,6 +62,9 @@
   var melody = window.SEEENMelodySync;
   var EMPTY_WAVES = Object.freeze([]);
 
+  // The diagnostic page loads the archived renderer instead.
+  if (window.SEEENUseReferenceRenderer) return;
+
   function clamp(x) {
     return Math.max(0, Math.min(1, x));
   }
@@ -270,20 +273,22 @@
           smooth((y - 0.82) / 0.18), smooth((-y - 0.82) / 0.18)
         ] : null,
         boundaryMask: 1 - smooth((outside - 1) / 0.08),
-        gain: point.gain
+        gain: point.gain,
+        floor: 0.014 * point.gain
       };
     });
   }
 
-  function prepareWave(age, mode) {
+  function prepareWave(age, mode, fields) {
     if (mode === "wide") return wideExpansionPhase(age);
     var travel = knock.narrowTravel(age);
-    return [
-      travel, smooth((travel - 1.32) / 0.55), Math.max(0, 2 - travel),
-      1 - smooth((travel - 1.97) / 0.22),
-      1 - (knock.narrow.decayPercent / 100) * smooth((travel - 1) / 1.19),
-      knock.cushionCompression(age)
-    ];
+    fields[0] = travel;
+    fields[1] = smooth((travel - 1.32) / 0.55);
+    fields[2] = Math.max(0, 2 - travel);
+    fields[3] = 1 - smooth((travel - 1.97) / 0.22);
+    fields[4] = 1 - (knock.narrow.decayPercent / 100) * smooth((travel - 1) / 1.19);
+    fields[5] = knock.cushionCompression(age);
+    return fields;
   }
 
   function hermiteProgress(y0, y1, startSlope, endSlope, t) {
@@ -321,9 +326,32 @@
     return WIDE_MAX_PHASE * wideExpansionProgress(age);
   }
 
+  function narrowReflected(point, travel, compression) {
+    var press = compression > 0 && point.cushion;
+    var reflected = 0;
+    // A zero wall weight contributes zero regardless of the Gaussian.
+    if (point.wall0) reflected = g(point.d[0] - travel, press ? 0.07 * (1 - compression * press[0]) : 0.07) * point.wall0 * 0.85;
+    if (point.wall1) reflected = Math.max(reflected, g(point.d[1] - travel, press ? 0.07 * (1 - compression * press[1]) : 0.07) * point.wall1 * 0.85);
+    if (point.wall2) reflected = Math.max(reflected, g(point.d[2] - travel, press ? 0.07 * (1 - compression * press[2]) : 0.07) * point.wall2 * 0.85);
+    if (point.wall3) reflected = Math.max(reflected, g(point.d[3] - travel, press ? 0.07 * (1 - compression * press[3]) : 0.07) * point.wall3 * 0.85);
+    return reflected;
+  }
+
+  function narrowKnockAmplitude(point, wave) {
+    var travel = wave[0], blend = wave[1], fade = wave[3], gain = wave[4];
+    if (fade === 0) return point.floor;
+    var combined = 0;
+    if (blend < 1) {
+      var reflected = narrowReflected(point, travel, wave[5]);
+      combined = Math.max(g(point.r - travel, 0.06) * 0.9, reflected * gain) * (1 - blend);
+    }
+    if (blend > 0) combined += g(point.r - wave[2], 0.075) * 0.78 * gain * blend;
+    return (0.014 + 0.92 * Math.min(1, combined * fade)) * point.gain;
+  }
+
   function synchronizedAmplitude(point, sampled, waves) {
     var amplitude = 0;
-    var floor = sampled ? 0.014 * point.gain : 0;
+    var floor = sampled ? sampled.floor : 0;
     for (var i = 0; i < waves.length; i += 1) {
       var wave = waves[i];
       var level;
@@ -332,12 +360,36 @@
       } else if (sampled.boundaryMask === 0) {
         level = floor * wave[3];
       } else {
-        level = narrowAmplitudePrepared(sampled, wave[0], wave[1], wave[2], wave[3], wave[4], wave[5]);
+        level = narrowKnockAmplitude(sampled, wave);
         level = floor * wave[3] + (level - floor) * sampled.boundaryMask;
       }
       amplitude = Math.max(amplitude, level);
     }
     return amplitude;
+  }
+
+  function fixedMelodyBasis(points, frequency) {
+    var basis = new Float64Array(points.length * 4);
+    for (var i = 0; i < points.length; i += 1) {
+      var point = points[i];
+      var radial = point.melodyRadius * frequency;
+      var second = radial * 0.61 + point.melodyX;
+      var offset = i * 4;
+      basis[offset] = Math.sin(radial);
+      basis[offset + 1] = Math.cos(radial);
+      basis[offset + 2] = Math.sin(second);
+      basis[offset + 3] = Math.cos(second);
+    }
+    return basis;
+  }
+
+  function fixedMelodyAlpha(point, frame, basis, index, sinFirst, cosFirst, sinSecond, cosSecond) {
+    var offset = index * 4;
+    var first = basis[offset] * cosFirst - basis[offset + 1] * sinFirst;
+    var second = basis[offset + 2] * cosSecond + basis[offset + 3] * sinSecond;
+    var level = Math.max(0, 0.5 + frame.firstMix * first + frame.secondMix * second);
+    var squared = level * level;
+    return squared * squared * point.melodyEnvelope * frame.brightness;
   }
 
   function now() {
@@ -353,6 +405,14 @@
     this.wide.forEach(function (point) { melody.preparePoint(point, false); });
     this.narrow.forEach(function (point) { melody.preparePoint(point, true); });
     this.reflection = reflectionGeometry(this.narrow);
+    // Amplitude mode keeps wavelength fixed. Prepare both themes before any
+    // audio interaction, so the first melody frame needs no table allocation.
+    this.melodyBasis = {
+      wide: {47.5: fixedMelodyBasis(this.wide, 47.5), 18.75: fixedMelodyBasis(this.wide, 18.75)},
+      narrow: {47.5: fixedMelodyBasis(this.narrow, 47.5), 18.75: fixedMelodyBasis(this.narrow, 18.75)}
+    };
+    this.preparedWaves = [];
+    this.narrowWaveFields = [];
     this.lastRender = null;
     this.mode = "wide";
     this.theme = "dark";
@@ -428,9 +488,27 @@
     var coveredScale;
     var waveAges = settings.waveAges;
     var melodyFrame = settings.melodyFrame;
-    var waves = waveAges && waveAges.map(function (age) { return prepareWave(age, mode); });
+    var waves = waveAges && this.preparedWaves;
+    var basis, sinFirst, cosFirst, sinSecond, cosSecond;
     var fieldOpacity = settings.fieldOpacity === undefined ? 1 : settings.fieldOpacity;
     var i;
+
+    if (waves) {
+      waves.length = waveAges.length;
+      for (i = 0; i < waveAges.length; i += 1) {
+        if (narrow && !this.narrowWaveFields[i]) this.narrowWaveFields[i] = new Float64Array(6);
+        waves[i] = prepareWave(waveAges[i], mode, this.narrowWaveFields[i]);
+      }
+    }
+    if (melodyFrame) {
+      basis = this.melodyBasis[mode][melodyFrame.f];
+      if (basis) {
+        sinFirst = Math.sin(melodyFrame.firstPhase);
+        cosFirst = Math.cos(melodyFrame.firstPhase);
+        sinSecond = Math.sin(melodyFrame.secondPhase);
+        cosSecond = Math.cos(melodyFrame.secondPhase);
+      }
+    }
 
     if (narrow) {
       narrowTravel = (time * 0.66) % 3.1;
@@ -466,7 +544,9 @@
         var amplitude = waves ? synchronizedAmplitude(point, narrow ? this.reflection[i] : null, waves) : narrow ? narrowAmplitudePrepared(
           point, narrowTravel, narrowBlend, narrowFocus, narrowFade
         ) : wideAmplitudePrepared(point, wideTimePhase);
-        if (melodyFrame) amplitude = Math.max(amplitude, melody.alpha(point, melodyFrame));
+        if (melodyFrame) amplitude = Math.max(amplitude, basis ?
+          fixedMelodyAlpha(point, melodyFrame, basis, i, sinFirst, cosFirst, sinSecond, cosSecond) :
+          melody.alpha(point, melodyFrame));
         context.globalAlpha = clamp(amplitude * scale * fieldOpacity);
         context.beginPath();
         context.arc(

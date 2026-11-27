@@ -465,13 +465,13 @@ async function checkWorker() {
   assert.equal(claimCount, 1);
   const status = await instance.message("CHECK_OFFLINE_STATUS");
   assert.equal(status.ready, true);
-  assert.equal(status.cacheName, "seeen-v04-step062-v1:" + scope);
+  assert.equal(status.cacheName, "seeen-v04-step071-v1:" + scope);
   assert.equal(status.switchCueCached, true);
   const store = stores.get(status.cacheName);
-  assert.equal(store.size, 24);
+  assert.equal(store.size, 26);
   offline = true;
   assert.equal(await (await instance.fetch("", null, "navigate")).text(), read("index.html").toString());
-  for (const name of ["knock-sync.js", "melody-sync.js", "melody-data/step04-rms.json"]) {
+  for (const name of ["knock-sync.js", "melody-sync.js", "fps-diagnostics.js", "fps-reference.js", "melody-data/step04-rms.json"]) {
     assert.equal(await (await instance.fetch(name)).text(), read(name).toString());
   }
   for (const key of keys) {
@@ -518,7 +518,7 @@ async function checkWorker() {
   offline = false;
   assert.equal((await instance.message("CACHE_ALL_ASSETS")).ready, true);
   assert.equal(instance.fetch("unknown"), undefined);
-  console.log("Worker simulation: 24 assets, update failure/repair, offline sync data and scripts, four MP4 streams, 206/416 and WAV passed.");
+  console.log("Worker simulation: 26 assets, update failure/repair, offline sync data and scripts, four MP4 streams, 206/416 and WAV passed.");
 }
 
 async function main() {
