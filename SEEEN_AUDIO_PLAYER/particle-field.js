@@ -10,6 +10,9 @@
   var CENTER_RADIUS = 3.4;
   var WIDE_COUNT = 6500;
   var NARROW_COUNT = 9500;
+  // Ease only the WIDE knock wave's spatial expansion. Its audio-clock age,
+  // lifetime and opacity envelope remain linear and unchanged.
+  var WIDE_EXPANSION_EASING_STRENGTH = 0.5;
   var STOP_MS = 420;
   // Adopted Reset emission phase: 32% of 900 ms.
   var EMISSION_MS = 288;
@@ -271,7 +274,7 @@
   }
 
   function prepareWave(age, mode) {
-    if (mode === "wide") return age * 3.5;
+    if (mode === "wide") return wideExpansionPhase(age, WIDE_EXPANSION_EASING_STRENGTH);
     var travel = knock.narrowTravel(age);
     return [
       travel, smooth((travel - 1.32) / 0.55), Math.max(0, 2 - travel),
@@ -279,6 +282,17 @@
       1 - (knock.narrow.decayPercent / 100) * smooth((travel - 1) / 1.19),
       knock.cushionCompression(age)
     ];
+  }
+
+  function wideExpansionPhase(age, strength) {
+    var amount = Math.max(0, Math.min(1, strength));
+    if (amount === 0) return age * 3.5;
+    var maxPhase = 13 + Math.PI;
+    var duration = maxPhase / 3.5;
+    var p = Math.max(0, Math.min(1, age / duration));
+    var linear = p;
+    var eased = linear + amount * (1 - Math.pow(1 - p, 3) - linear);
+    return maxPhase * eased;
   }
 
   function synchronizedAmplitude(point, sampled, waves) {
@@ -809,7 +823,8 @@
       stopMs: STOP_MS,
       emissionMs: EMISSION_MS,
       resetMs: RESET_MS,
-      postResetPlaybackGraceMs: POST_RESET_PLAYBACK_GRACE_MS
+      postResetPlaybackGraceMs: POST_RESET_PLAYBACK_GRACE_MS,
+      wideExpansionEasingStrength: WIDE_EXPANSION_EASING_STRENGTH
     },
     formulas: {
       makeWide: makeWide,
@@ -819,6 +834,7 @@
       narrowAmplitude: narrowAmplitude,
       narrowDot: narrowDot,
       resetPhase: resetPhase,
+      wideExpansionPhase: wideExpansionPhase,
       mix: mix
     }
   };

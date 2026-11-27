@@ -16,6 +16,12 @@ const scope = "https://local.test/v04/";
 const profiles = melody.prepareData(data, scope);
 const near = (actual, expected, epsilon = 1e-11) =>
   assert.ok(Math.abs(actual - expected) <= epsilon, actual + " vs " + expected);
+function expectedWideAge(age) {
+  const maxPhase = 13 + Math.PI;
+  const duration = maxPhase / 3.5;
+  const p = Math.max(0, Math.min(1, age / duration));
+  return maxPhase * (0.5 * p + 0.5 * (1 - Math.pow(1 - p, 3))) / 3.5;
+}
 
 const previewPath = path.resolve(process.argv[2]);
 const preview = require(path.join(previewPath, "melody.js")).MelodyPreview;
@@ -63,13 +69,20 @@ async function main() {
       [times[1] + .16, 0], [times[1] + .64, 0], [124.69, 0], [.01, 1], [56.78, 0], [94.2, 3]]) {
       const ages = knock.waveAges(times, time, mode, cycles ? duration : 0);
       const settings = {mode, theme, time, scale: 1, waveAges: ages};
-      assert.deepEqual(app.capture(settings), before.capture(settings), "STEP 02.1 knock colors and coordinates");
+      const oldRendererAges = mode === "wide" ? ages.map(expectedWideAge) : ages;
+      const appKnock = app.capture(settings);
+      const referenceKnock = before.capture({...settings, waveAges: oldRendererAges});
+      assert.equal(appKnock.length, referenceKnock.length);
+      for (let i = 0; i < appKnock.length; i++) {
+        appKnock[i].forEach((value, component) => near(value, referenceKnock[i][component], 1e-12));
+      }
       const param = preview.parameters("AMPLITUDE", preview.defaults, preview.sampleFeatures(prepared, full.sampleInterval, time));
       const expectedFrame = preview.phaseFrame(param, theme === "bright", time + cycles * duration);
       const melodyFrame = melody.phaseFrame(melody.sampleRms(track.values, data.sampleInterval, time),
         theme === "bright", time + cycles * duration);
       for (const waveAges of [[], ages]) {
-        previewRender({mode, theme, melodyFrame: expectedFrame, ages: waveAges});
+        const previewAges = mode === "wide" ? waveAges.map(expectedWideAge) : waveAges;
+        previewRender({mode, theme, melodyFrame: expectedFrame, ages: previewAges});
         const pixels = app.capture({...settings, melodyFrame, waveAges});
         assert.equal(previewDots.length - 1, pixels.length);
         for (let i = 0; i < pixels.length; i++) {

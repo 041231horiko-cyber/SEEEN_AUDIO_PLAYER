@@ -15,6 +15,26 @@ const read = name => fs.readFileSync(path.join(app, name));
 const data = key => JSON.parse(read("knock-data/" + key + ".json"));
 const href = key => new URL("audio/" + data(key).audioFile, scope).href;
 
+function expectedWidePhase(age, strength) {
+  const maxPhase = 13 + Math.PI;
+  const duration = maxPhase / 3.5;
+  const p = Math.max(0, Math.min(1, age / duration));
+  return maxPhase * (p + strength * (1 - Math.pow(1 - p, 3) - p));
+}
+
+function checkWideEasing(formulas, constants) {
+  const duration = (13 + Math.PI) / 3.5;
+  assert.equal(constants.wideExpansionEasingStrength, .5);
+  for (const age of [0, .01, .1, duration * .25, duration * .5, duration * .9, duration]) {
+    assert.equal(formulas.wideExpansionPhase(age, 0), age * 3.5,
+      "zero strength must reproduce legacy WIDE distance");
+    assert.ok(Math.abs(formulas.wideExpansionPhase(age, .5) - expectedWidePhase(age, .5)) < 1e-12,
+      "50% strength must follow the approved curve");
+  }
+  assert.equal(formulas.wideExpansionPhase(0, .5), 0);
+  assert.equal(formulas.wideExpansionPhase(duration, .5), 13 + Math.PI);
+}
+
 async function checkClock() {
   const replies = new Map();
   const clock = sync.createClock(name => new Promise(resolve => replies.set(name, resolve)), scope);
@@ -180,7 +200,9 @@ function loadApp({readAsset = read, withMelody = true, fetchAsset = async name =
     audio.fire("ended");
   }
   return {
-    audio, renderer, state, document, events, get, select, toggle, endCue, camera: canvas, flush, settle, frame, advance,
+    audio, renderer, formulas: env.SEEENParticleField.formulas,
+    constants: env.SEEENParticleField.constants,
+    state, document, events, get, select, toggle, endCue, camera: canvas, flush, settle, frame, advance,
     melodyClock: env.SEEENMelodySync?.clock,
     capture(settings) { capture = true; renderer.render(settings); capture = false; return arcs.slice(0, -1); },
     collect(value) { collect = value; },
@@ -201,6 +223,7 @@ function loadApp({readAsset = read, withMelody = true, fetchAsset = async name =
 
 async function checkApp(previewDirectory) {
   const app = loadApp();
+  checkWideEasing(app.formulas, app.constants);
   const oldDraw = captureRenderer(previewDirectory);
   const previewTimeline = require(path.resolve(previewDirectory, "timeline.js"));
   for (const mode of ["wide", "narrow"]) for (const theme of ["bright", "dark"]) {
@@ -214,7 +237,9 @@ async function checkApp(previewDirectory) {
       const previewWaves = previewTimeline.activeWaves(previewEvents, position, mode, sync.narrow,
         wrapped && mode === "narrow" ? 124.7 : 0).map(wave => wave.age);
       const args = {mode, theme, scale: waveAges.length ? 1 : 0, waveAges};
-      const before = oldDraw({...args, scale: previewWaves.length ? 1 : 0, waveAges: previewWaves,
+      const expectedWaves = mode === "wide" && !wrapped ?
+        waveAges.map(age => expectedWidePhase(age, .5) / 3.5) : previewWaves;
+      const before = oldDraw({...args, scale: expectedWaves.length ? 1 : 0, waveAges: expectedWaves,
         narrowProfile: sync.narrow}), after = app.capture(args);
       if (wrapped && mode === "wide") {
         assert.equal(before.length, 0);
@@ -403,7 +428,7 @@ async function checkWorker() {
   assert.equal(claimCount, 1);
   const status = await instance.message("CHECK_OFFLINE_STATUS");
   assert.equal(status.ready, true);
-  assert.equal(status.cacheName, "seeen-v04-step04-v1:" + scope);
+  assert.equal(status.cacheName, "seeen-v04-step061-v1:" + scope);
   assert.equal(status.switchCueCached, true);
   const store = stores.get(status.cacheName);
   assert.equal(store.size, 24);
